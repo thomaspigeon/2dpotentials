@@ -1,6 +1,7 @@
 import numpy as np
 from potentials.General2DPotential import General2DPotential
 
+
 class DoubleWellPotential(General2DPotential):
     """"Double well potential separated in the x direction. A parameter epsilon allows to change the spread in the
     y direction. The smaller epsilon, the more it is spread."""
