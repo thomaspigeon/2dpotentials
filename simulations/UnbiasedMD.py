@@ -48,7 +48,7 @@ class OverdampedLangevin(Simulation):
         """
         super().__init__(pot, beta, dt=dt, seed=seed)
 
-    def step(self, x, r):
+    def step(self, x):
         """One step of integration of the overdamped langevin dynamics discretized with the Euler-Maruyama scheme
 
         :param x:       np.array, ndim==2, shape==[1, 2], position
@@ -58,7 +58,7 @@ class OverdampedLangevin(Simulation):
         :return: gauss: np.array, ndim==2, shape==[1, 2], gaussian drawn from r
         """
         grad = self.pot.nabla_V(x)
-        gauss = r.normal(size=(x.shape[1]))
+        gauss = self.r.normal(size=(x.shape[1]))
         x = x - grad * self.dt + np.sqrt(2 * self.dt / self.beta) * gauss
         return x, grad, gauss
 
@@ -78,20 +78,20 @@ class OverdampedLangevin(Simulation):
         x = x_0
         if not save_grad and not save_gauss:
             for i in range(n_time_steps):
-                x, _, _ = self.step(x, self.r)
+                x, _, _ = self.step(x)
                 x_traj.append(x)
             return np.array([x_traj])
         if save_grad and not save_gauss:
             grad_traj = []
             for i in range(n_time_steps):
-                x, grad, _ = self.step(x, self.r)
+                x, grad, _ = self.step(x)
                 x_traj.append(x)
                 grad_traj.append(grad)
             return np.array([x_traj, grad_traj])
         if not save_grad and save_gauss:
             gauss_traj = []
             for i in range(n_time_steps):
-                x, _, gauss = self.step(x, self.r)
+                x, _, gauss = self.step(x)
                 x_traj.append(x)
                 gauss_traj.append(gauss)
             return np.array([x_traj, gauss_traj])
@@ -99,7 +99,7 @@ class OverdampedLangevin(Simulation):
             grad_traj = []
             gauss_traj = []
             for i in range(n_time_steps):
-                x, grad, gauss = self.step(x, self.r)
+                x, grad, gauss = self.step(x)
                 x_traj.append(x)
                 grad_traj.append(grad)
                 gauss_traj.append(gauss)
@@ -123,7 +123,7 @@ class Langevin(Simulation):
         self.M = M
         self.gamma = gamma
 
-    def step(self, x, p, r):
+    def step(self, x, p):
         """
 
         :param x:       np.array, ndim==2, shape==[1, 2], position
@@ -133,7 +133,7 @@ class Langevin(Simulation):
         :return: grad:  np.array, ndim==2, shape==[1, 2], forces acting on x
         :return: gauss: np.array, ndim==2, shape==[1, 2], gaussian drawn from r
         """
-        gauss = r.normal(size=(x.shape[1]))
+        gauss = self.r.normal(size=(x.shape[1]))
         p = p + (self.dt / 2) * self.pot.nabla_V(x)
         x = x + (self.dt / 2) * p / self.M
         p = np.exp(- self.gamma * self.dt / self.M) * p + \
@@ -158,19 +158,19 @@ class Langevin(Simulation):
         """
 
         x_traj = []
-        x = x_0
         p_traj = []
+        x = x_0
         p = p_0
         if not save_grad and not save_gauss:
             for i in range(n_time_steps):
-                x, p, _, _ = self.step(x, p, self.r)
+                x, p, _, _ = self.step(x, p)
                 x_traj.append(x)
                 p_traj.append(p)
             return np.array([x_traj, p_traj])
         if save_grad and  not save_gauss:
             grad_traj = []
             for i in range(n_time_steps):
-                x, p, grad, _ = self.step(x, p, self.r)
+                x, p, grad, _ = self.step(x, p)
                 x_traj.append(x)
                 p_traj.append(p)
                 grad_traj.append(grad)
@@ -178,7 +178,7 @@ class Langevin(Simulation):
         if not save_grad and save_gauss:
             gauss_traj = []
             for i in range(n_time_steps):
-                x, p, _, gauss = self.step(x, p, self.r)
+                x, p, _, gauss = self.step(x, p)
                 x_traj.append(x)
                 p_traj.append(p)
                 gauss_traj.append(gauss)
@@ -187,7 +187,7 @@ class Langevin(Simulation):
             grad_traj = []
             gauss_traj = []
             for i in range(n_time_steps):
-                x, p, grad, gauss = self.step(x, p, self.r)
+                x, p, grad, gauss = self.step(x, p)
                 x_traj.append(x)
                 p_traj.append(p)
                 grad_traj.append(grad)
