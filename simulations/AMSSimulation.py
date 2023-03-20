@@ -452,9 +452,9 @@ class AMSOverdampedLangevin(OverdampedLangevin):
         :param save_gauss:  boolean, whether the gaussian should be saved
         :return p:          float, estimated probability of reaching P before R starting from the initial conditions
         :return z_kills:    list of float, all the various values of z_kill
-        :return replicas:   list of trajectories. Trajectories are np.array, ndim==3, shape==[n, any, 2], n
-                            depends on whether the forces and the gaussians should be saved. The first dimension is
-                            always the positions then comes the forces if required and finally the gaussians if required
+        :return replicas:   list of lists of trajectories, len== number of ams iteration + 1, trajectories.
+                            Trajectories are np.array, ndim==3, shape==[n, any, 2], n depends on whether the forces and
+                            the gaussians should be saved. The first dimension is always the positions then comes the
                             as well. All the various R -> R and R -> P trajectories sampled
         :return weights:    list of weights corresponding to each of the trajectories stored in reps.
         :return md_steps:   int, number of steps of dynamics
@@ -466,8 +466,8 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                                                                      save_gauss=save_gauss)
         if return_all:
             replicas = []
-            replicas += reps
-        weights = [1 / n_rep] * n_rep
+            replicas.append([reps])
+            weights = [[1 / n_rep] * n_rep]
         killed = []
         z_kills = []
         p = 1
@@ -482,11 +482,15 @@ class AMSOverdampedLangevin(OverdampedLangevin):
             total_md_steps += md_steps
             p = p * (1 - len(killed) / n_rep)
             if return_all:
+                replica = []
                 for i in killed:
-                    replicas += reps[i]
+                    replica.append(reps[i])
+                replicas.append([replica])
+                weights.appen([[p / n_rep] * len(killed)])
         if return_all:
             return p, z_kills, replicas, weights, total_md_steps
         else:
+            weights = [[p / n_rep] * n_rep]
             return p, z_kills, reps, weights, total_md_steps
 
 
@@ -987,11 +991,12 @@ class AMSLangevin(Langevin):
         :param save_gauss:  boolean, whether the gaussian should be saved
         :return p:          float, estimated probability of reaching P before R starting from the initial conditions
         :return z_kills:    list of float, all the various values of z_kill
-        :return replicas:   list of trajectories. Trajectories are np.array, ndim==3, shape==[n, any, 2], n
-                            depends on whether the forces and the gaussians should be saved. The first dimension is
-                            always the positions, then comes the momenta , then comes the forces if required and finally
-                            the gaussians if required as well. All the various R -> R and R -> P trajectories sampled
-        :return weights:    list of weights corresponding to each of the trajectories stored in reps.
+        :return replicas:   list of lists of trajectories, len== number of ams iteration + 1, trajectories.
+                            Trajectories are np.array, ndim==3, shape==[n, any, 2], n depends on whether the forces and
+                            the gaussians should be saved. The first dimension is always the positions, then comes the
+                            momenta , then comes the forces if required and finally the gaussians if required as well.
+                            All the various R -> R and R -> P trajectories sampled
+        :return weights:    list of lists of weights corresponding to each of the trajectories stored in reps.
         :return md_steps:   int, number of steps of dynamics
         """
 
@@ -1001,8 +1006,8 @@ class AMSLangevin(Langevin):
                                                                      save_gauss=save_gauss)
         if return_all:
             replicas = []
-            replicas += reps
-        weights = [1 / n_rep] * n_rep
+            replicas.append([reps])
+            weights = [[1 / n_rep] * n_rep]
         killed = []
         z_kills = []
         p = 1
@@ -1017,9 +1022,13 @@ class AMSLangevin(Langevin):
             total_md_steps += md_steps
             p = p * (1 - len(killed) / n_rep)
             if return_all:
+                replica = []
                 for i in killed:
-                    replicas += reps[i]
+                    replica.append([reps[i]])
+                replicas.append([replica])
+                weights.append([[p / n_rep] * len(killed)])
         if return_all:
             return p, z_kills, replicas, weights, total_md_steps
         else:
+            weights = [[p / n_rep] * n_rep]
             return p, z_kills, reps, weights, total_md_steps
