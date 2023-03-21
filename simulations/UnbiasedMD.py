@@ -52,7 +52,6 @@ class OverdampedLangevin(Simulation):
         """One step of integration of the overdamped langevin dynamics discretized with the Euler-Maruyama scheme
 
         :param x:       np.array, ndim==2, shape==[1, 2], position
-        :param r:       np.random.RandomState
         :return: x:     np.array, ndim==2, shape==[1, 2], next position
         :return: grad:  np.array, ndim==2, shape==[1, 2], forces acting on x
         :return: gauss: np.array, ndim==2, shape==[1, 2], gaussian drawn from r
