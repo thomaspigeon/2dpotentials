@@ -91,9 +91,9 @@ class General2DPotential:
         :param x: np.array, ndim==2, shape==[any, 2]
         :returns bool (if x.ndim == 1) or array of bool (if x.ndim == 2) Whether the argument x is inside above SigmaR """
         if x.ndim == 1:
-            return np.sqrt(np.sum((x -  self.minR)**2)) >= self.SigmaR_position * self.R_radius
+            return np.sqrt(np.sum((x - self.minR)**2)) >= self.SigmaR_position * self.R_radius
         elif x.ndim == 2:
-            return np.sqrt(np.sum((x -  self.minR)**2, axis=1)) >= self.SigmaR_position * self.R_radius
+            return np.sqrt(np.sum((x - self.minR)**2, axis=1)) >= self.SigmaR_position * self.R_radius
 
     def in_P(self, x):
         """Definition of the Reactant state P
