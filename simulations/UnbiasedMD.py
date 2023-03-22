@@ -65,35 +65,40 @@ class OverdampedLangevin(Simulation):
         """ Runs and unbiased dynamics for
 
         :param x_0:             np.array, ndim==2, shape==[1, 2], initial position of the dynamics
-        :param p_0:             np.array, ndim==2, shape==[1, 2], initial momentum of the dynamics
         :param n_time_steps:    int, number of time steps.
         :param save_grad:       boolean, whether the forces should be saved
         :param save_gauss:      boolean, whether the gaussian should be saved
-        :return trajectory:     np.array, ndim==3, shape==[n, n_time_steps, 2], n depends on whether the forces and the
-                                gaussians should be saved. The first dimension is always the positions,  then comes the
-                                forces if required and finally the gaussians if required as well.
+        :return: trajectory     dict, trajectory["x_traj"] is the trajectory of the positions, trajectory["grad_traj"]
+                                is the trajectory of the forces if required and trajectory["gauss_traj"] is the
+                                trajectory of the gaussians if required
         """
+        trajectory = {}
         x_traj = []
         x = x_0
         if not save_grad and not save_gauss:
             for i in range(n_time_steps):
                 x, _, _ = self.step(x)
                 x_traj.append(x)
-            return np.array([x_traj])
+            trajectory["x_traj"] = np.array(x_traj)
+            return trajectory
         if save_grad and not save_gauss:
             grad_traj = []
             for i in range(n_time_steps):
                 x, grad, _ = self.step(x)
                 x_traj.append(x)
                 grad_traj.append(grad)
-            return np.array([x_traj, grad_traj])
+            trajectory["x_traj"] = np.array(x_traj)
+            trajectory["grad_traj"] = np.array(grad_traj)
+            return trajectory
         if not save_grad and save_gauss:
             gauss_traj = []
             for i in range(n_time_steps):
                 x, _, gauss = self.step(x)
                 x_traj.append(x)
                 gauss_traj.append(gauss)
-            return np.array([x_traj, gauss_traj])
+            trajectory["x_traj"] = np.array(x_traj)
+            trajectory["gauss_traj"] = np.array(gauss_traj)
+            return trajectory
         if save_grad and save_gauss:
             grad_traj = []
             gauss_traj = []
@@ -102,8 +107,10 @@ class OverdampedLangevin(Simulation):
                 x_traj.append(x)
                 grad_traj.append(grad)
                 gauss_traj.append(gauss)
-            return np.array([x_traj, grad_traj, gauss_traj])
-
+            trajectory["x_traj"] = np.array(x_traj)
+            trajectory["grad_traj"] = np.array(grad_traj)
+            trajectory["gauss_traj"] = np.array(gauss_traj)
+            return trajectory
 
 class Langevin(Simulation):
     """Class for generating unbiased Overdamped Langevin trajectories"""
@@ -150,12 +157,11 @@ class Langevin(Simulation):
         :param n_time_steps:    int, number of time steps.
         :param save_grad:       boolean, whether the forces should be saved
         :param save_gauss:      boolean, whether the gaussian should be saved
-        :return: trajectory     np.array, ndim==3, shape==[n, n_time_steps, 2], n depends on whether the forces and the
-                                gaussians should be saved. The first dimension is always the positions, then comes the
-                                momenta , then comes the forces if required and finally the gaussians if required as
-                                well.
+        :return: trajectory     dict, trajectory["x_traj"] is the trajectory of the positions, trajectory["p_traj"] is
+                                the trajectory of the momenta, trajectory["grad_traj"] is the trajectory of the forces
+                                if required and trajectory["gauss_traj"] is the trajectory of the gaussians if required
         """
-
+        trajectory = {}
         x_traj = []
         p_traj = []
         x = x_0
@@ -165,7 +171,9 @@ class Langevin(Simulation):
                 x, p, _, _ = self.step(x, p)
                 x_traj.append(x)
                 p_traj.append(p)
-            return np.array([x_traj, p_traj])
+            trajectory["x_traj"] = np.array(x_traj)
+            trajectory["p_traj"] = np.array(p_traj)
+            return trajectory
         if save_grad and  not save_gauss:
             grad_traj = []
             for i in range(n_time_steps):
@@ -173,7 +181,10 @@ class Langevin(Simulation):
                 x_traj.append(x)
                 p_traj.append(p)
                 grad_traj.append(grad)
-            return np.array([x_traj, p_traj, grad_traj])
+            trajectory["x_traj"] = np.array(x_traj)
+            trajectory["p_traj"] = np.array(p_traj)
+            trajectory["grad_traj"] = np.array(grad_traj)
+            return trajectory
         if not save_grad and save_gauss:
             gauss_traj = []
             for i in range(n_time_steps):
@@ -181,7 +192,10 @@ class Langevin(Simulation):
                 x_traj.append(x)
                 p_traj.append(p)
                 gauss_traj.append(gauss)
-            return np.array([x_traj, p_traj, gauss_traj])
+            trajectory["x_traj"] = np.array(x_traj)
+            trajectory["p_traj"] = np.array(p_traj)
+            trajectory["gauss_traj"] = np.array(gauss_traj)
+            return trajectory
         if save_grad and save_gauss:
             grad_traj = []
             gauss_traj = []
@@ -191,5 +205,9 @@ class Langevin(Simulation):
                 p_traj.append(p)
                 grad_traj.append(grad)
                 gauss_traj.append(gauss)
-            return np.array([x_traj, p_traj, grad_traj, gauss_traj])
+            trajectory["x_traj"] = np.array(x_traj)
+            trajectory["p_traj"] = np.array(p_traj)
+            trajectory["grad_traj"] = np.array(grad_traj)
+            trajectory["gauss_traj"] = np.array(gauss_traj)
+            return trajectory
 
