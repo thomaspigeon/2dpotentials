@@ -138,8 +138,9 @@ class General2DPotential:
     def set_2D_plot_grid_precision(self, n_bins_x, n_bins_y):
         """Set the number of bins in the x and y directions
 
-        :param n_bins_x: int
-        :param n_bins_y: int"""
+        :param n_bins_x: int,
+        :param n_bins_y: int,
+        """
         self.n_bins_x = n_bins_x
         self.n_bins_y = n_bins_y
         gridx = np.linspace(self.x_domain[0], self.x_domain[1], self.n_bins_x)
