@@ -31,7 +31,29 @@ class DeepAutoEncoder(torch.nn.Module):
         decoded = self.decoder(encoded)
         return decoded
 
+    def xi_ae(self,  x):
+        """Collective variable defined through an auto encoder model
 
+        :param x: np.array, position, ndim = 2, shape = [any, 2]
+        :return: xi: np.array, ndim = 2, shape = [any, 1]
+        """
+        self.eval()
+        if not torch.is_tensor(x):
+            x = torch.from_numpy(x).float()
+        return self.encoder(x).detach().numpy()
+
+    def grad_xi_ae(self, x):
+        """Gradient of the collective variable defined through an auto encoder model
+
+        :param x: np.array, position, ndim = 2, shape = [any, 1]
+        :return: xi: np.array, ndim = 2, shape = [any, 2]
+        """
+        self.eval()
+        if not torch.is_tensor(x):
+            x = torch.from_numpy(x).float()
+        x.requires_grad_()
+        enc = self.encoder(x)
+        return ((torch.autograd.grad(outputs=enc.sum(), inputs=x)[0][:, :2]) ** 2).mean()
 
 class DeepAutoEncoderDoubleDec(torch.nn.Module):
     """Class for auto-encoders with two decoders. This class does not contain a forward function."""
@@ -79,6 +101,30 @@ class DeepAutoEncoderDoubleDec(torch.nn.Module):
         enc = self.encoder(inp)
         dec = self.decoder2(enc)
         return dec
+
+    def xi_ae(self,  x):
+        """Collective variable defined through an auto encoder model
+
+        :param x: np.array, position, ndim = 2, shape = [any, 2]
+        :return: xi: np.array, ndim = 2, shape = [any, 1]
+        """
+        self.eval()
+        if not torch.is_tensor(x):
+            x = torch.from_numpy(x).float()
+        return self.encoder(x).detach().numpy()
+
+    def grad_xi_ae(self, x):
+        """Gradient of the collective variable defined through an auto encoder model
+
+        :param x: np.array, position, ndim = 2, shape = [any, 1]
+        :return: xi: np.array, ndim = 2, shape = [any, 2]
+        """
+        self.eval()
+        if not torch.is_tensor(x):
+            x = torch.from_numpy(x).float()
+        x.requires_grad_()
+        enc = self.encoder(x)
+        return ((torch.autograd.grad(outputs=enc.sum(), inputs=x)[0][:, :2]) ** 2).mean()
 
 class EffectiveDynamicsAutoEncoder(torch.nn.Module):
     """Class for auto-encoders with effective dynamics. """
@@ -140,3 +186,28 @@ class EffectiveDynamicsAutoEncoder(torch.nn.Module):
         ed_diff = self.ed_d(enc)
         ed_diff = torch.reshape(ed_diff, ed_diff.shape + (ed_diff.shape[-1],))
         return ed_diff
+
+    def xi_ae(self,  x):
+        """Collective variable defined through an auto encoder model
+
+        :param x: np.array, position, ndim = 2, shape = [any, 2]
+        :return: xi: np.array, ndim = 2, shape = [any, 1]
+        """
+        self.eval()
+        if not torch.is_tensor(x):
+            x = torch.from_numpy(x).float()
+        return self.encoder(x).detach().numpy()
+
+    def grad_xi_ae(self, x):
+        """Gradient of the collective variable defined through an auto encoder model
+
+        :param x: np.array, position, ndim = 2, shape = [any, 1]
+        :return: xi: np.array, ndim = 2, shape = [any, 2]
+        """
+        self.eval()
+        if not torch.is_tensor(x):
+            x = torch.from_numpy(x).float()
+        x.requires_grad_()
+        enc = self.encoder(x)
+        return ((torch.autograd.grad(outputs=enc.sum(), inputs=x)[0][:, :2]) ** 2).mean()
+
