@@ -160,12 +160,13 @@ class General2DPotential:
         ax.pcolormesh(self.x_plot, self.y_plot, pot_on_grid, cmap='coolwarm', shading='auto', vmin=self.V_domain[0], vmax=self.V_domain[0])
 
     def plot_function_iso_levels(self, ax, function, n_lines, set_lim=True):
-        """Plot the isolines of a given function to the given ax
+        """Plot the iso-lines of a given function to the given ax
 
         :param ax:         Instance of matplotlib.axes.Axes
         :param function:   a function taking as argument np.array with ndim==2, shape==[any, 2]
-        :param n_lines:    int, number of isolines to plot"""
-        function_on_grid = function(self.x2d).reshape(self.n_bins_x, self.n_bins_x)
+        :param n_lines:    int, number of iso-lines to plot
+        :param set_lim:    boolean, whether the limits of the x and y axes should be set."""
+        function_on_grid = function(self.x2d).reshape(self.n_bins_x, self.n_bins_y)
         if set_lim:
             ax.set_ylim(self.y_domain[0], self.y_domain[1])
             ax.set_xlim(self.x_domain[0], self.x_domain[1])
