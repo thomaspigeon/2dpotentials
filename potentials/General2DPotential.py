@@ -145,8 +145,8 @@ class General2DPotential:
         self.n_bins_y = n_bins_y
         gridx = np.linspace(self.x_domain[0], self.x_domain[1], self.n_bins_x)
         gridy = np.linspace(self.y_domain[0], self.y_domain[1], self.n_bins_y)
-        self.x_plot = np.outer(gridx, np.ones(self.n_bins_x))
-        self.y_plot = np.outer(gridy, np.ones(self.n_bins_y)).T
+        self.x_plot = np.outer(gridx, np.ones(self.n_bins_y))
+        self.y_plot = np.outer(gridy, np.ones(self.n_bins_x)).T
         self.x2d = np.concatenate((self.x_plot.reshape(self.n_bins_x * self.n_bins_y, 1), self.y_plot.reshape(self.n_bins_x * self.n_bins_y, 1)), axis=1)
 
     def plot_potential_heat_map(self, ax, set_lim=True):
