@@ -477,7 +477,8 @@ class TainAEOneDecoder(TrainAE):
                 loss = self.mse_boltz_weight * mse_blotz + \
                        self.squared_grad_boltz_weight * squared_grad_enc + \
                        self.l1_pen_weight * l1_pen + \
-                       self.l2_pen_weight * l2_pen
+                       self.l2_pen_weight * l2_pen + \
+                       self.pen_points_weight * self.penalization_on_points()
                 if "react_points" in self.dataset.keys():
                     # Forward pass for reactive trajectories
                     enc_reac = self.ae.encoder(X[:, 3:5])
@@ -490,7 +491,6 @@ class TainAEOneDecoder(TrainAE):
                     z_grid = torch.linspace(enc_min, enc_max, self.n_bins_var_dist_dec)
                     dec = self.ae.decoder(z_grid)
                     loss += self.var_dist_dec_weight * self.dist_dec_penalization(dec)
-                loss += self.pen_points_weight * self.penalization_on_points()
                 loss.backward()
                 self.optimizer.step()
                 loss_dict["train_loss"][epoch].append(loss.detach().numpy())
@@ -525,7 +525,8 @@ class TainAEOneDecoder(TrainAE):
                 loss = self.mse_boltz_weight * mse_blotz + \
                        self.squared_grad_boltz_weight * squared_grad_enc + \
                        self.l1_pen_weight * l1_pen + \
-                       self.l2_pen_weight * l2_pen
+                       self.l2_pen_weight * l2_pen + \
+                       self.pen_points_weight * self.penalization_on_points()
                 if "react_points" in self.dataset.keys():
                     # Forward pass for reactive trajectories
                     enc_reac = self.ae.encoder(X[:, 3:5])
@@ -538,7 +539,6 @@ class TainAEOneDecoder(TrainAE):
                     z_grid = torch.linspace(enc_min, enc_max, self.n_bins_var_dist_dec)
                     dec = self.ae.decoder(z_grid)
                     loss += self.var_dist_dec_weight * self.dist_dec_penalization(dec)
-                loss += self.pen_points_weight * self.penalization_on_points()
                 loss_dict["test_loss"][epoch].append(loss.detach().numpy())
                 loss_dict["test_mse_boltz"][epoch].append(mse_blotz.detach().numpy())
                 loss_dict["test_squared_grad_enc_blotz"][epoch].append(squared_grad_enc.detach().numpy())
@@ -573,7 +573,8 @@ class TainAEOneDecoder(TrainAE):
         loss = self.mse_boltz_weight * mse_blotz + \
                self.squared_grad_boltz_weight * squared_grad_enc + \
                self.l1_pen_weight * l1_pen + \
-               self.l2_pen_weight * l2_pen
+               self.l2_pen_weight * l2_pen + \
+               self.pen_points_weight * self.penalization_on_points()
         if "react_points" in self.dataset.keys():
             # Forward pass for reactive trajectories
             enc_reac = self.ae.encoder(X[:, 3:5])
@@ -586,7 +587,6 @@ class TainAEOneDecoder(TrainAE):
             z_grid = torch.linspace(enc_min, enc_max, self.n_bins_var_dist_dec)
             dec = self.ae.decoder(z_grid)
             loss += self.var_dist_dec_weight * self.dist_dec_penalization(dec)
-        loss += self.pen_points_weight * self.penalization_on_points() 
         print("""Test loss: """, loss)
         print("""Test MSE Boltzmann: """, mse_blotz)
         print("""Test squarred grad encoder: """, squared_grad_enc)
@@ -823,7 +823,8 @@ class TainAETwoDecoder(TrainAE):
                 loss = self.mse_boltz_weight * mse_blotz + \
                        self.squared_grad_boltz_weight * squared_grad_enc + \
                        self.l1_pen_weight * l1_pen + \
-                       self.l2_pen_weight * l2_pen
+                       self.l2_pen_weight * l2_pen + \
+                       self.pen_points_weight * self.penalization_on_points()
                 if "react_points" in self.dataset.keys():
                     # Forward pass for reactive trajectories
                     enc_reac = self.ae.encoder(X[:, 3:5])
@@ -839,7 +840,6 @@ class TainAETwoDecoder(TrainAE):
                     loss += self.var_dist_dec_weight * self.dist_dec_penalization(dec1)
                     dec2 = self.ae.decoder2(z_grid)
                     loss += self.var_dist_dec_weight * self.dist_dec_penalization(dec2)
-                loss += self.pen_points_weight * self.penalization_on_points()
                 loss.backward()
                 self.optimizer.step()
                 loss_dict["train_loss"][epoch].append(loss.detach().numpy())
@@ -875,7 +875,8 @@ class TainAETwoDecoder(TrainAE):
                 loss = self.mse_boltz_weight * mse_blotz + \
                        self.squared_grad_boltz_weight * squared_grad_enc + \
                        self.l1_pen_weight * l1_pen + \
-                       self.l2_pen_weight * l2_pen
+                       self.l2_pen_weight * l2_pen + \
+                       self.pen_points_weight * self.penalization_on_points()
                 if "react_points" in self.dataset.keys():
                     # Forward pass for reactive trajectories
                     enc_reac = self.ae.encoder(X[:, 3:5])
@@ -891,7 +892,6 @@ class TainAETwoDecoder(TrainAE):
                     loss += self.var_dist_dec_weight * self.dist_dec_penalization(dec1)
                     dec2 = self.ae.decoder2(z_grid)
                     loss += self.var_dist_dec_weight * self.dist_dec_penalization(dec2)
-                loss += self.pen_points_weight * self.penalization_on_points()
                 loss_dict["test_loss"][epoch].append(loss.detach().numpy())
                 loss_dict["test_mse_boltz"][epoch].append(mse_blotz.detach().numpy())
                 loss_dict["test_squared_grad_enc_blotz"][epoch].append(squared_grad_enc.detach().numpy())
@@ -927,7 +927,8 @@ class TainAETwoDecoder(TrainAE):
         loss = self.mse_boltz_weight * mse_blotz + \
                self.squared_grad_boltz_weight * squared_grad_enc + \
                self.l1_pen_weight * l1_pen + \
-               self.l2_pen_weight * l2_pen
+               self.l2_pen_weight * l2_pen + \
+               self.pen_points_weight * self.penalization_on_points()
         if "react_points" in self.dataset.keys():
             # Forward pass for reactive trajectories
             enc_reac = self.ae.encoder(X[:, 3:5])
@@ -943,7 +944,6 @@ class TainAETwoDecoder(TrainAE):
             loss += self.var_dist_dec_weight * self.dist_dec_penalization(dec1)
             dec2 = self.ae.decoder2(z_grid)
             loss += self.var_dist_dec_weight * self.dist_dec_penalization(dec2)
-        loss += self.pen_points_weight * self.penalization_on_points()
         print("""Test loss: """, loss)
         print("""Test MSE Boltzmann: """, mse_blotz)
         print("""Test squarred grad encoder: """, squared_grad_enc)
