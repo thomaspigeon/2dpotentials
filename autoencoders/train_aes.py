@@ -49,6 +49,8 @@ class TrainAE:
         if standardize:
             self.scaler = StandardScaler()
             self.dataset["boltz_points"] = self.scaler.fit_transform(dataset["boltz_points"])
+            penalization_points = self.scaler.transform(penalization_points)
+            self.penalization_point = torch.tensor(penalization_points.astype('float32'))
             if "react_points" in dataset.keys():
                 self.dataset["react_points"] = self.scaler.transform(dataset["react_points"])
         self.zca_whiten = zca_whiten
@@ -58,6 +60,8 @@ class TrainAE:
             epsilon = 1e-12  # Small value to prevent division by 0
             self.ZCAMatrix = np.dot(U, np.dot(np.diag(1.0 / np.sqrt(D + epsilon)), U.T))
             self.dataset["boltz_points"] = self.ZCAMatrix.dot(dataset["boltz_points"].T).T
+            penalization_points = self.ZCAMatrix.dot(penalization_points.T).T
+            self.penalization_point = torch.tensor(penalization_points.astype('float32'))
             if "react_points" in dataset.keys():
                 self.dataset["react_points"] = self.ZCAMatrix.dot(dataset["react_points"].T).T
         self.training_dataset = None
