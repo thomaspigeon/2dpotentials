@@ -1048,7 +1048,6 @@ class TainAETwoDecoder(TrainAE):
                 grad_f_enc1 = torch.autograd.grad(z1, Esp_X_given_z1[-1])[0]
                 grads_enc1.append(grad_f_enc1.detach().numpy())
                 z1.requires_grad_()
-                dec1 = self.ae.decoder1(z1)
                 grad_f_dec1 = torch.autograd.functional.jacobian(self.ae.decoder1, z1, create_graph=False).sum(dim=1)
                 grads_dec1.append(grad_f_dec1.detach().numpy())
                 Esp_X_given_z1[-1] = Esp_X_given_z1[-1].detach().numpy()
@@ -1061,7 +1060,6 @@ class TainAETwoDecoder(TrainAE):
                 grad_f_enc2 = torch.autograd.grad(z2, Esp_X_given_z2[-1])[0]
                 grads_enc2.append(grad_f_enc2.detach().numpy())
                 z2.requires_grad_()
-                dec2 = self.ae.decoder2(z2)
                 grad_f_dec2 = torch.autograd.functional.jacobian(self.ae.decoder2, z2, create_graph=False).sum(dim=1)
                 grads_dec2.append(grad_f_dec2.detach().numpy())
                 Esp_X_given_z2[-1] = Esp_X_given_z2[-1].detach().numpy()
