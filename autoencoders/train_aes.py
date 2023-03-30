@@ -95,7 +95,9 @@ class TrainAE:
                                 loss_params["pen_points_weight"], float >= 0, prefactor of the penalization so that
                                 certain points have a certain encoded value. loss_params["var_dist_dec_weight"] int >= 1,
                                 prefactor of the penalization term to enforce that equal distances in the lattent space
-                                correspond to equal distance in the decoded space. loss_params["n_wait"], int >= 1, early
+                                correspond to equal distance in the decoded space. loss_params["n_bins_var_dist_dec"],
+                                int >= 2, number of bins to enforce that equal distances in the lattent space correspond
+                                to equal distance in the decoded space loss_params["n_wait"], int >= 1, early
                                 stopping parameter. If the test loss has not decreased for n_wait epochs, the training
                                 is stopped and the model kept in self.ae is the one corresponding to the minimal test
                                 loss
