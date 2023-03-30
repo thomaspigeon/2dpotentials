@@ -32,8 +32,11 @@ class TrainAE:
                                     the encoder is penalized if its values on these points differ from
                                     penalization_point[:, 2]
         :param standardize:         boolean, whether the points should be rescaled so that the average in every
-                                    direction is zero and has variance equal to 1
-        :param zca_whiten:          boolean, whether the data should be whitened using mahalanobis whitening
+                                    direction is zero and has variance equal to 1  for the "boltz_points" WARNING the
+                                    weights are currently not considered in this operation
+        :param zca_whiten:          boolean, whether the data should be whitened using mahalanobis whitening fitted on
+                                    the "boltz_points" WARNING the weights are currently not considered in this
+                                    operation
         """
         self.ae = ae
         self.pot = pot,
