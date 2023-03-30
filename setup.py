@@ -2,10 +2,11 @@ from setuptools import setup, find_packages
 
 VERSION = '0.0.1'
 DESCRIPTION = 'A package to train auto-encoders to learn CV on certain 2D potentials'
-LONG_DESCRIPTION = 'This package allows to use some simple 2D potentials to analyse and test the behavior of various machine learning approaches to identify collective variables'
+LONG_DESCRIPTION = 'This package allows to use some simple 2D potentials to analyse and test the behavior of various ' \
+                   'machine learning approaches to identify collective variables'
 
 setup(
-    name="2dAEandCVs",
+    name="2dpotentials",
     version=VERSION,
     description=DESCRIPTION,
     long_description=LONG_DESCRIPTION,
