@@ -14,7 +14,8 @@ class Simulation:
         """
         self.pot = pot
         self.beta = beta
-        if dt is None:
+        self.dt = dt
+        if self.dt is None:
             self.dt = pot.dx
         self.seed = seed
         self.r = np.random.RandomState(self.seed)
