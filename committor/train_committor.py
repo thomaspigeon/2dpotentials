@@ -25,7 +25,7 @@ class TrainCommittorOverdamped:
         :param dataset:             dict, dataset["any_distrib"], np.array with ndim==2, shape==[any, 6],
                                     dataset["any_distrib"][:, :2] are positions, dataset["any_distrib"][:, 2:4] are
                                     gaussians drawn during overdamped dynamics to go to the next positions
-                                    dataset["any_distrib"][:, 4:] are the next positions, dataset["dt"] is the
+                                    dataset["any_distrib"][:, 4:], dataset["dt"] is the
                                     integration time step and dataset["beta"] is the inverse temperature energy 1/ k_B*T
                                     Another option is dataset["boltz_points"] a np.array with ndim==2, shape==[any, 2]
                                     an array of points on the 2D potentials distributed according ot the boltzmann gibbs
