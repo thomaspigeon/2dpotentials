@@ -38,8 +38,8 @@ class CommittorOneDecoder(torch.nn.Module):
 
     def inR(self, inp):
         return 1 - (1 / 2 + (1 / 2) * self.HT(
-            (200 * (torch.sqrt(torch.sum((inp - self.minP) ** 2, dim=1)).reshape(
-                [len(inp), 1]) - self.P_radius) / self.P_radius) + 1))
+            (200 * (torch.sqrt(torch.sum((inp - self.minR) ** 2, dim=1)).reshape(
+                [len(inp), 1]) - self.R_radius) / self.R_radius) + 1))
 
     def inP(self, inp):
         return 1 - (1 / 2 + (1 / 2) * self.HT(
@@ -123,8 +123,8 @@ class CommittorTwoDecoder(torch.nn.Module):
 
     def inR(self, inp):
         return 1 - (1 / 2 + (1 / 2) * self.HT(
-            (200 * (torch.sqrt(torch.sum((inp - self.minP) ** 2, dim=1)).reshape(
-                [len(inp), 1]) - self.P_radius) / self.P_radius) + 1))
+            (200 * (torch.sqrt(torch.sum((inp - self.minR) ** 2, dim=1)).reshape(
+                [len(inp), 1]) - self.R_radius) / self.R_radius) + 1))
 
     def inP(self, inp):
         return 1 - (1 / 2 + (1 / 2) * self.HT(
