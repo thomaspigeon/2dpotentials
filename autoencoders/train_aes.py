@@ -271,8 +271,8 @@ class TrainAE:
 
         :param split_index:    int, the split of the training data_set, should be such that 0 <= split_index <= n_splits
         """
-        self.train_data = torch.tensor(self.training_dataset[self.Kfold_splits[split_index][0]].astype('float32'))
-        self.validation_data = torch.tensor(self.training_dataset[self.Kfold_splits[split_index][1]].astype('float32'))
+        self.train_data = torch.tensor(self.training_dataset[self.Kfold_splits[split_index]].astype('float32'))
+        self.validation_data = torch.tensor(self.training_dataset[self.Kfold_splits[split_index]].astype('float32'))
 
     @staticmethod
     def l1_penalization(model):
