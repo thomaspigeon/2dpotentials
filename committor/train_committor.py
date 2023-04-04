@@ -173,7 +173,7 @@ class TrainCommittorOverdamped:
             self.l2_pen_weight = loss_params["l2_pen_weight"]
 
         if "pen_points_weight" not in loss_params.keys():
-            self.pen_points_weight = 0
+            self.pen_points_weight = 0.
             print("""pen_points_weight value not provided, set to default value of: """, self.pen_points_weight)
         elif type(loss_params["pen_points_weight"]) != float or loss_params["pen_points_weight"] < 0.:
             raise ValueError("""loss_params["pen_points_weight"] must be a float >= 0.""")
