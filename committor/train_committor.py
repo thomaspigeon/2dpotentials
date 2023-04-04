@@ -871,10 +871,12 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
         plt.figure()
         plt.plot(z_values, cos_angles,
                  label='cosine of angle between the gradient of the encoder at the cdt. avg. and the derivative of the decoder')
+        plt.legend()
         plt.show()
         plt.figure()
         plt.plot(z_values, dist_fec_exp,
                  label='distance between the decoder and the conditional average')
+        plt.legend()
         plt.show()
 
 
@@ -1381,10 +1383,12 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
         plt.plot(z_values2, cos_angles2,
                  label="""cosine of angle between the gradient of the encoder at the \n 
                  cdt. avg. 2 and the derivative of the decoder2""")
+        plt.legend()
         plt.show()
         plt.figure()
         plt.plot(z_values1, dist_dec_exp1,
                  label='distance between the decoder 1 and the conditional average 1')
         plt.plot(z_values2, dist_dec_exp2,
                  label='distance between the decoder 2 and the conditional average 2')
+        plt.legend()
         plt.show()
