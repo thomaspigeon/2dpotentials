@@ -607,7 +607,7 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
                        self.l1_pen_weight * l1_pen + \
                        self.l2_pen_weight * l2_pen + \
                        self.pen_points_weight * self.penalization_on_points()
-                loss_dict["train_ito_loss"][epoch].append(ito_term)
+                loss_dict["train_ito_loss"][epoch].append(ito_term.detach().numpy())
                 if "boltz_points" in self.dataset.keys() and "react_points" in self.dataset.keys():
                     enc = self.committor_model.encoder(X[:, 6:8])
                     out = self.committor_model.decoder(enc)
@@ -679,7 +679,7 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
                        self.l1_pen_weight * l1_pen + \
                        self.l2_pen_weight * l2_pen + \
                        self.pen_points_weight * self.penalization_on_points()
-                loss_dict["test_ito_loss"][epoch].append(ito_term)
+                loss_dict["test_ito_loss"][epoch].append(ito_term.detach().numpy())
                 if "boltz_points" in self.dataset.keys() and "react_points" in self.dataset.keys():
                     enc = self.committor_model.encoder(X[:, 6:8])
                     out = self.committor_model.decoder(enc)
@@ -1050,7 +1050,7 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
                        self.l1_pen_weight * l1_pen + \
                        self.l2_pen_weight * l2_pen + \
                        self.pen_points_weight * self.penalization_on_points()
-                loss_dict["train_ito_loss"][epoch].append(ito_term)
+                loss_dict["train_ito_loss"][epoch].append(ito_term.detach().numpy())
                 if "boltz_points" in self.dataset.keys() and "react_points" in self.dataset.keys():
                     enc = self.committor_model.encoder(X[:, 6:8])
                     dec1 = self.committor_model.decoder1(enc)
@@ -1090,7 +1090,7 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
                             self.squared_grad_react_weight * squared_grad_enc_react
                     loss_dict["train_mse_react"][epoch].append(mse_react.detach().numpy())
                     loss_dict["train_squared_grad_enc_react"][epoch].append(squared_grad_enc_react.detach().numpy())
-                loss_dict["train_loss"][epoch].append([loss])
+                loss_dict["train_loss"][epoch].append(loss.detach().numpy())
                 loss.backward()
                 self.optimizer.step()
             loss_dict["train_loss"][epoch] = np.mean(loss_dict["train_loss"][epoch])
@@ -1125,7 +1125,7 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
                        self.l1_pen_weight * l1_pen + \
                        self.l2_pen_weight * l2_pen + \
                        self.pen_points_weight * self.penalization_on_points()
-                loss_dict["test_ito_loss"][epoch].append(ito_term)
+                loss_dict["test_ito_loss"][epoch].append(ito_term.detach().numpy())
                 if "boltz_points" in self.dataset.keys() and "react_points" in self.dataset.keys():
                     enc = self.committor_model.encoder(X[:, 6:8])
                     dec1 = self.committor_model.decoder1(enc)
@@ -1165,7 +1165,7 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
                             self.squared_grad_react_weight * squared_grad_enc_react
                     loss_dict["test_mse_react"][epoch].append(mse_react.detach().numpy())
                     loss_dict["test_squared_grad_enc_react"][epoch].append(squared_grad_enc_react.detach().numpy())
-                loss_dict["test_loss"][epoch].append([loss])
+                loss_dict["test_loss"][epoch].append(loss.detach().numpy())
                 loss.backward()
                 self.optimizer.step()
             loss_dict["test_loss"][epoch] = np.mean(loss_dict["test_loss"][epoch])
