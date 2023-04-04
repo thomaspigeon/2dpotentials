@@ -141,13 +141,13 @@ class Langevin(Simulation):
         :return: gauss: np.array, ndim==2, shape==[1, 2], gaussian drawn from r
         """
         gauss = self.r.normal(size=(x.shape[1]))
-        p = p + (self.dt / 2) * self.pot.nabla_V(x)
+        p = p - (self.dt / 2) * self.pot.nabla_V(x)
         x = x + (self.dt / 2) * p / self.M
         p = np.exp(- self.gamma * self.dt / self.M) * p + \
             np.sqrt((1 - np.exp(- 2 * self.gamma * self.dt / self.M)) / self.beta) * gauss
         x = x + (self.dt / 2) * p / self.M
         grad = self.pot.nabla_V(x)
-        p = p + (self.dt / 2) * grad
+        p = p - (self.dt / 2) * grad
         return x, p, grad, gauss
 
     def run(self, x_0, p_0, n_time_steps, save_grad=False, save_gauss=False):
