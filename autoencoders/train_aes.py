@@ -141,6 +141,14 @@ class TrainAE:
         else:
             self.l2_pen_weight = loss_params["l2_pen_weight"]
 
+        if "pen_points_weight" not in loss_params.keys():
+            self.pen_points_weight = 0
+            print("""pen_points_weight value not provided, set to default value of: """, self.pen_points_weight)
+        elif type(loss_params["pen_points_weight"]) != float or loss_params["pen_points_weight"] < 0.:
+            raise ValueError("""loss_params["pen_points_weight"] must be a float >= 0.""")
+        else:
+            self.pen_points_weight = loss_params["pen_points_weight"]
+
         if "var_dist_dec_weight" not in loss_params.keys():
             self.var_dist_dec_weight = 0
             print("""var_dist_dec_weight value not provided, set to default value of: """, self.var_dist_dec_weight)
@@ -150,10 +158,10 @@ class TrainAE:
             self.l2_pen_weight = loss_params["var_dist_dec_weight"]
 
         if "n_bins_var_dist_dec" not in loss_params.keys():
-            self.var_dist_dec_weight = 20
+            self.n_bins_var_dist_dec = 20
             print("""n_bins_var_dist_dec value not provided, set to default value of: """, self.n_bins_var_dist_dec)
         elif type(loss_params["n_bins_var_dist_dec"]) != int or loss_params["n_bins_var_dist_dec"] < 1:
-            raise ValueError("""loss_params["var_dist_dec_weight"] must be a float >= 1""")
+            raise ValueError("""loss_params["n_bins_var_dist_dec"] must be a int >= 1""")
         else:
             self.n_bins_var_dist_dec = loss_params["n_bins_var_dist_dec"]
 
@@ -163,7 +171,7 @@ class TrainAE:
         elif type(loss_params["n_wait"]) != int or loss_params["n_wait"] < 1:
             raise ValueError("""loss_params["n_wait"] must be a int >= 1""")
         else:
-            self.l2_pen_weight = loss_params["n_wait"]
+            self.n_wait = loss_params["n_wait"]
 
     def set_dataset(self, dataset):
         """Method to reset dataset
@@ -313,10 +321,10 @@ class TrainAE:
                             inp
         :return grad_enc:   torch float, squared gradient of the encoder
         """
-        return (inp[:, 2] * (torch.autograd.grad(outputs=enc.sum(),
-                                                 inputs=inp,
-                                                 retain_graph=True,
-                                                 create_graph=True)[0][:, :2]) ** 2).mean()
+        return (inp[:, 2] * ((torch.autograd.grad(outputs=enc.sum(),
+                                                  inputs=inp,
+                                                  retain_graph=True,
+                                                  create_graph=True)[0][:, :2]) ** 2).sum(dim=1)).mean()
 
     def penalization_on_points(self):
         """
@@ -426,7 +434,7 @@ class TainAEOneDecoder(TrainAE):
         :return mse:    torch float, mean squared error between input and output for points distributed according to
                         Boltzmann-Gibbs measure.
         """
-        return torch.mean(torch.sum(inp[:, 2] * (inp[:, 0:2] - out) ** 2, dim=1))
+        return torch.mean(inp[:, 2] * torch.sum((inp[:, 0:2] - out) ** 2, dim=1))
 
     @staticmethod
     def mse_loss_react(inp, out):
@@ -440,7 +448,7 @@ class TainAEOneDecoder(TrainAE):
         :return mse:    torch float, mean squared error between input and output for points distributed according to
                         Boltzmann-Gibbs measure.
         """
-        return torch.mean(torch.sum(inp[:, 5] * (inp[:, 3:5] - out) ** 2, dim=1))
+        return torch.mean(inp[:, 5] * torch.sum((inp[:, 3:5] - out) ** 2, dim=1))
 
     def train(self, batch_size, max_epochs):
         """ Do the training of the model self.ae
@@ -496,8 +504,8 @@ class TainAEOneDecoder(TrainAE):
                     mse_react = self.mse_loss_react(X, out_reac)
                     loss += self.mse_react_weight * mse_react
                 if self.var_dist_dec_weight > 0.:
-                    enc_min = torch.min(self.ae.encoder(self.train_data))
-                    enc_max = torch.max(self.ae.encoder(self.train_data))
+                    enc_min = torch.min(self.ae.encoder(self.train_data[:, :2])).detach()
+                    enc_max = torch.max(self.ae.encoder(self.train_data[:, :2])).detach()
                     z_grid = torch.linspace(enc_min, enc_max, self.n_bins_var_dist_dec)
                     dec = self.ae.decoder(z_grid)
                     loss += self.var_dist_dec_weight * self.dist_dec_penalization(dec)
@@ -544,8 +552,8 @@ class TainAEOneDecoder(TrainAE):
                     mse_react = self.mse_loss_react(X, out_reac)
                     loss += self.mse_react_weight * mse_react
                 if self.var_dist_dec_weight > 0.:
-                    enc_min = torch.min(self.ae.encoder(self.train_data))
-                    enc_max = torch.max(self.ae.encoder(self.train_data))
+                    enc_min = torch.min(self.ae.encoder(self.train_data[:, :2])).detach()
+                    enc_max = torch.max(self.ae.encoder(self.train_data[:, :2])).detach()
                     z_grid = torch.linspace(enc_min, enc_max, self.n_bins_var_dist_dec)
                     dec = self.ae.decoder(z_grid)
                     loss += self.var_dist_dec_weight * self.dist_dec_penalization(dec)
@@ -567,7 +575,7 @@ class TainAEOneDecoder(TrainAE):
                     epoch = max_epochs
                     self.ae = model
             epoch += 1
-            print("training ends after " + str(len(loss_dict["test_loss"])) + " epochs.\n")
+        print("training ends after " + str(len(loss_dict["test_loss"])) + " epochs.\n")
 
     def print_test_loss(self):
         """Print the test loss and its various components"""
@@ -592,8 +600,8 @@ class TainAEOneDecoder(TrainAE):
             mse_react = self.mse_loss_react(X, out_reac)
             loss += self.mse_react_weight * mse_react
         if self.var_dist_dec_weight > 0.:
-            enc_min = torch.min(self.ae.encoder(self.train_data))
-            enc_max = torch.max(self.ae.encoder(self.train_data))
+            enc_min = torch.min(self.ae.encoder(X[:, :2])).detach()
+            enc_max = torch.max(self.ae.encoder(X[:, :2])).detach()
             z_grid = torch.linspace(enc_min, enc_max, self.n_bins_var_dist_dec)
             dec = self.ae.decoder(z_grid)
             loss += self.var_dist_dec_weight * self.dist_dec_penalization(dec)
@@ -843,8 +851,8 @@ class TainAETwoDecoder(TrainAE):
                     mse_react = self.mse_loss_react(X, dec_reac1, dec_reac2)
                     loss += self.mse_react_weight * mse_react
                 if self.var_dist_dec_weight > 0.:
-                    enc_min = torch.min(self.ae.encoder(self.train_data))
-                    enc_max = torch.max(self.ae.encoder(self.train_data))
+                    enc_min = torch.min(self.ae.encoder(self.train_data[:, :2])).detach()
+                    enc_max = torch.max(self.ae.encoder(self.train_data[:, :2])).detach()
                     z_grid = torch.linspace(enc_min, enc_max, self.n_bins_var_dist_dec)
                     dec1 = self.ae.decoder1(z_grid)
                     loss += self.var_dist_dec_weight * self.dist_dec_penalization(dec1)
@@ -895,8 +903,8 @@ class TainAETwoDecoder(TrainAE):
                     mse_react = self.mse_loss_react(X, dec_reac1, dec_reac2)
                     loss += self.mse_react_weight * mse_react
                 if self.var_dist_dec_weight > 0.:
-                    enc_min = torch.min(self.ae.encoder(self.train_data))
-                    enc_max = torch.max(self.ae.encoder(self.train_data))
+                    enc_min = torch.min(self.ae.encoder(self.train_data[:, :2])).detach()
+                    enc_max = torch.max(self.ae.encoder(self.train_data[:, :2])).detach()
                     z_grid = torch.linspace(enc_min, enc_max, self.n_bins_var_dist_dec)
                     dec1 = self.ae.decoder1(z_grid)
                     loss += self.var_dist_dec_weight * self.dist_dec_penalization(dec1)
@@ -920,7 +928,7 @@ class TainAETwoDecoder(TrainAE):
                     epoch = max_epochs
                     self.ae = model
             epoch += 1
-            print("training ends after " + str(len(loss_dict["test_loss"])) + " epochs.\n")
+        print("training ends after " + str(len(loss_dict["test_loss"])) + " epochs.\n")
 
     def print_test_loss(self):
         """Print the test loss and its various components"""
@@ -947,8 +955,8 @@ class TainAETwoDecoder(TrainAE):
             mse_react = self.mse_loss_react(X, dec_react1, dec_react2)
             loss += self.mse_react_weight * mse_react
         if self.var_dist_dec_weight > 0.:
-            enc_min = torch.min(self.ae.encoder(X))
-            enc_max = torch.max(self.ae.encoder(X))
+            enc_min = torch.min(self.ae.encoder(X[:, :2])).detach()
+            enc_max = torch.max(self.ae.encoder(X[:, :2])).detach()
             z_grid = torch.linspace(enc_min, enc_max, self.n_bins_var_dist_dec)
             dec1 = self.ae.decoder1(z_grid)
             loss += self.var_dist_dec_weight * self.dist_dec_penalization(dec1)

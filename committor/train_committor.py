@@ -172,13 +172,21 @@ class TrainCommittorOverdamped:
         else:
             self.l2_pen_weight = loss_params["l2_pen_weight"]
 
+        if "pen_points_weight" not in loss_params.keys():
+            self.pen_points_weight = 0
+            print("""pen_points_weight value not provided, set to default value of: """, self.pen_points_weight)
+        elif type(loss_params["pen_points_weight"]) != float or loss_params["pen_points_weight"] < 0.:
+            raise ValueError("""loss_params["pen_points_weight"] must be a float >= 0.""")
+        else:
+            self.pen_points_weight = loss_params["pen_points_weight"]
+
         if "n_wait" not in loss_params.keys():
             self.n_wait = 10
             print("""n_wait value not provided, set to default value of: """, self.n_wait)
         elif type(loss_params["n_wait"]) != int or loss_params["n_wait"] < 1:
             raise ValueError("""loss_params["n_wait"] must be a int >= 1""")
         else:
-            self.l2_pen_weight = loss_params["n_wait"]
+            self.n_wait = loss_params["n_wait"]
 
     def set_dataset(self, dataset):
         """Method to reset dataset
@@ -331,8 +339,16 @@ class TrainCommittorOverdamped:
 
         :param split_index:    int, the split of the training data_set, should be such that 0 <= split_index <= n_splits
         """
-        self.train_data = torch.tensor(self.training_dataset[self.Kfold_splits[split_index][0]].astype('float32'))
-        self.validation_data = torch.tensor(self.training_dataset[self.Kfold_splits[split_index][1]].astype('float32'))
+        if split_index < 0:
+            raise ValueError("The split index must be between 0 and the number of splits - 1")
+        validation = self.training_dataset[self.Kfold_splits[split_index]]
+        indices = np.setdiff1d(range(len(self.Kfold_splits)), split_index)
+        train = self.training_dataset[self.Kfold_splits[indices[0]]]
+        if len(self.Kfold_splits) > 2:
+            for i in range(1, len(indices)):
+                train = np.append(train, self.training_dataset[self.Kfold_splits[indices[i]]], axis=0)
+        self.train_data = torch.tensor(train.astype('float32'))
+        self.validation_data = torch.tensor(validation.astype('float32'))
 
     @staticmethod
     def l1_penalization(model):
@@ -361,15 +377,15 @@ class TrainCommittorOverdamped:
         :return grad_enc:   torch float, squared gradient of the encoder ie: | \nabla q |²
         """
         if "react_points" in self.dataset.keys() and "boltz_points" in self.dataset.keys():
-            return (inp[:, 8] * (torch.autograd.grad(outputs=enc.sum(),
-                                                     inputs=inp[:, 6:8],
-                                                     retain_graph=True,
-                                                     create_graph=True)[0][:, :2]) ** 2).mean()
+            return (inp[:, 8] * ((torch.autograd.grad(outputs=enc.sum(),
+                                                      inputs=inp[:, 6:8],
+                                                      retain_graph=True,
+                                                      create_graph=True)[0][:, :2]) ** 2).sum(dim=1)).mean()
         elif "react_points" not in self.dataset.keys() and "boltz_points" in self.dataset.keys():
-            return (inp[:, 8] * (torch.autograd.grad(outputs=enc.sum(),
-                                                     inputs=inp[:, 6:8],
-                                                     retain_graph=True,
-                                                     create_graph=True)[0][:, :2]) ** 2).mean()
+            return (inp[:, 8] * ((torch.autograd.grad(outputs=enc.sum(),
+                                                      inputs=inp[:, 6:8],
+                                                      retain_graph=True,
+                                                      create_graph=True)[0][:, :2]) ** 2).sum(dim=1)).mean()
         else:
             raise ValueError("""Cannot compute this term if there are no points distributed according to the Bolzmann-
                                 Gibbs measure in the dataset""")
@@ -384,15 +400,15 @@ class TrainCommittorOverdamped:
                             ie: (q - q²)^{-1} * | \nabla q |²
         """
         if "react_points" in self.dataset.keys() and "boltz_points" in self.dataset.keys():
-            return ((inp[:, 11]/(enc * (1 - enc))) * (torch.autograd.grad(outputs=enc.sum(),
-                                                      inputs=inp[:, 9:11],
-                                                      retain_graph=True,
-                                                      create_graph=True)[0][:, :2]) ** 2).mean()
+            return ((inp[:, 11]/(enc * (1 - enc))) * ((torch.autograd.grad(outputs=enc.sum(),
+                                                       inputs=inp[:, 9:11],
+                                                       retain_graph=True,
+                                                       create_graph=True)[0][:, :2]) ** 2).sum(dim=1)).mean()
         elif "react_points" in self.dataset.keys() and "boltz_points" not in self.dataset.keys():
-            return ((inp[:, 8]/(enc * (1 - enc))) * (torch.autograd.grad(outputs=enc.sum(),
+            return ((inp[:, 8]/(enc * (1 - enc))) * ((torch.autograd.grad(outputs=enc.sum(),
                                                       inputs=inp[:, 6:8],
                                                       retain_graph=True,
-                                                      create_graph=True)[0][:, :2]) ** 2).mean()
+                                                      create_graph=True)[0][:, :2]) ** 2).sum(dim=1)).mean()
         else:
             raise ValueError("""Cannot compute this term if there are no points distributed according to the reactive
                                 trajectory measure in the dataset""")
@@ -513,9 +529,9 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
                         Boltzmann-Gibbs measure.
         """
         if "react_points" in self.dataset.keys() and "boltz_points" in self.dataset.keys():
-            return torch.mean(torch.sum(inp[:, 8] * (inp[:, 6:8] - out) ** 2, dim=1))
+            return torch.mean(inp[:, 8] * torch.sum((inp[:, 6:8] - out) ** 2, dim=1))
         elif "react_points" not in self.dataset.keys() and "boltz_points" in self.dataset.keys():
-            return torch.mean(torch.sum(inp[:, 8] * (inp[:, 6:8] - out) ** 2, dim=1))
+            return torch.mean(inp[:, 8] * torch.sum((inp[:, 6:8] - out) ** 2, dim=1))
         else:
             raise ValueError("""Cannot compute this term if there are no points distributed according to the Bolzmann-
                                 Gibbs measure in the dataset""")
@@ -530,9 +546,9 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
                         Boltzmann-Gibbs measure.
         """
         if "react_points" in self.dataset.keys() and "boltz_points" in self.dataset.keys():
-            return torch.mean(torch.sum(inp[:, 11] * (inp[:, 9:11] - out) ** 2, dim=1))
+            return torch.mean(inp[:, 11] * torch.sum((inp[:, 9:11] - out) ** 2, dim=1))
         elif "react_points" not in self.dataset.keys() and "boltz_points" in self.dataset.keys():
-            return torch.mean(torch.sum(inp[:, 8] * (inp[:, 6:8] - out) ** 2, dim=1))
+            return torch.mean(inp[:, 8] * torch.sum((inp[:, 6:8] - out) ** 2, dim=1))
         else:
             raise ValueError("""Cannot compute this term if there are no points distributed according to the reactive
                                 trajectory measure in the dataset""")
