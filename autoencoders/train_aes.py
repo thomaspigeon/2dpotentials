@@ -576,6 +576,7 @@ class TainAEOneDecoder(TrainAE):
                     self.ae = model
             epoch += 1
         print("training ends after " + str(len(loss_dict["test_loss"])) + " epochs.\n")
+        return loss_dict
 
     def print_test_loss(self):
         """Print the test loss and its various components"""
@@ -929,6 +930,7 @@ class TainAETwoDecoder(TrainAE):
                     self.ae = model
             epoch += 1
         print("training ends after " + str(len(loss_dict["test_loss"])) + " epochs.\n")
+        return loss_dict
 
     def print_test_loss(self):
         """Print the test loss and its various components"""

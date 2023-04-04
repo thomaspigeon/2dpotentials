@@ -735,7 +735,8 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
                     epoch = max_epochs
                     self.committor_model = model
             epoch += 1
-            print("training ends after " + str(len(loss_dict["test_loss"])) + " epochs.\n")
+        print("training ends after " + str(len(loss_dict["test_loss"])) + " epochs.\n")
+        return loss_dict
 
     def print_test_loss(self):
         """Print the test loss and its various components"""
@@ -1181,7 +1182,9 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
                     epoch = max_epochs
                     self.committor_model = model
             epoch += 1
-            print("training ends after " + str(len(loss_dict["test_loss"])) + " epochs.\n")
+        print("training ends after " + str(len(loss_dict["test_loss"])) + " epochs.\n")
+        return loss_dict
+
     def print_test_loss(self):
         """Print the test loss and its various components"""
         X = self.test_dataset
