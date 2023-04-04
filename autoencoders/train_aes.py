@@ -39,7 +39,7 @@ class TrainAE:
                                     operation
         """
         self.ae = ae
-        self.pot = pot,
+        self.pot = pot
         self.dataset = dataset
         if penalization_points is None:
             penalization_points = np.append(np.append(pot.minR, np.zeros([1, 1]), axis=1),
