@@ -258,9 +258,11 @@ class TrainAE:
     def split_training_dataset_K_folds(self, n_splits, seed=None):
         """ Allows to split the training dataset into multiple groups to optimize eventual hyperparameter
 
-        :param n_splits: int, number of splits
+        :param n_splits: int, number of splits, must be int >= 2
         :param seed:     int, random state
         """
+        if n_splits < 2:
+            raise ValueError("The number of splits must be superior or equal to 2")
         kf = KFold(n_splits=n_splits, random_state=seed)
         self.Kfold_splits = []
         for i, fold in kf.split(self.training_dataset):
@@ -271,8 +273,16 @@ class TrainAE:
 
         :param split_index:    int, the split of the training data_set, should be such that 0 <= split_index <= n_splits
         """
-        self.train_data = torch.tensor(self.training_dataset[self.Kfold_splits[split_index]].astype('float32'))
-        self.validation_data = torch.tensor(self.training_dataset[self.Kfold_splits[split_index]].astype('float32'))
+        if split_index < 0:
+            raise ValueError("The split index must be between 0 and the number of splits - 1")
+        validation = self.training_dataset[self.Kfold_splits[split_index]]
+        indices = np.setdiff1d(range(len(self.Kfold_splits)), split_index)
+        train = self.training_dataset[self.Kfold_splits[indices[0]]]
+        if len(self.Kfold_splits) > 2:
+            for i in range(1, len(indices)):
+                train = np.append(train, self.training_dataset[self.Kfold_splits[indices[i]]], axis=0)
+        self.train_data = torch.tensor(train.astype('float32'))
+        self.validation_data = torch.tensor(validation.astype('float32'))
 
     @staticmethod
     def l1_penalization(model):
