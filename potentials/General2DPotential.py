@@ -172,7 +172,7 @@ class General2DPotential:
                       cmap='coolwarm',
                       shading='auto',
                       vmin=self.V_domain[0],
-                      vmax=self.V_domain[0])
+                      vmax=self.V_domain[1])
 
     def plot_function_iso_levels(self, ax, function, n_lines, set_lim=True):
         """Plot the iso-lines of a given function to the given ax
