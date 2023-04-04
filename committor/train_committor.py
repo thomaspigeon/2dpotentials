@@ -731,7 +731,7 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
             if loss_dict["test_loss"][epoch] == np.min(loss_dict["test_loss"]):
                 model = copy.deepcopy(self.committor_model)
             if epoch >= self.n_wait:
-                if np.min(loss_dict["test_loss"]) > np.min(loss_dict["test_loss"][- self.n_wait:]):
+                if np.min(loss_dict["test_loss"]) < np.min(loss_dict["test_loss"][- self.n_wait:]):
                     epoch = max_epochs
                     self.committor_model = model
             epoch += 1
@@ -1178,7 +1178,7 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
             if loss_dict["test_loss"][epoch] == np.min(loss_dict["test_loss"]):
                 model = copy.deepcopy(self.committor_model)
             if epoch >= self.n_wait:
-                if np.min(loss_dict["test_loss"]) > np.min(loss_dict["test_loss"][- self.n_wait:]):
+                if np.min(loss_dict["test_loss"]) < np.min(loss_dict["test_loss"][- self.n_wait:]):
                     epoch = max_epochs
                     self.committor_model = model
             epoch += 1

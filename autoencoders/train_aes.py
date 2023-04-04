@@ -571,7 +571,7 @@ class TainAEOneDecoder(TrainAE):
             if loss_dict["test_loss"][epoch] == np.min(loss_dict["test_loss"]):
                 model = copy.deepcopy(self.ae)
             if epoch >= self.n_wait:
-                if np.min(loss_dict["test_loss"]) > np.min(loss_dict["test_loss"][- self.n_wait:]):
+                if np.min(loss_dict["test_loss"]) < np.min(loss_dict["test_loss"][- self.n_wait:]):
                     epoch = max_epochs
                     self.ae = model
             epoch += 1
@@ -925,7 +925,7 @@ class TainAETwoDecoder(TrainAE):
             if loss_dict["test_loss"][epoch] == np.min(loss_dict["test_loss"]):
                 model = copy.deepcopy(self.ae)
             if epoch >= self.n_wait:
-                if np.min(loss_dict["test_loss"]) > np.min(loss_dict["test_loss"][- self.n_wait:]):
+                if np.min(loss_dict["test_loss"]) < np.min(loss_dict["test_loss"][- self.n_wait:]):
                     epoch = max_epochs
                     self.ae = model
             epoch += 1
