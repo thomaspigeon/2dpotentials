@@ -440,7 +440,7 @@ class TrainCommittorOverdamped:
             ax.set_xlim(self.pot.x_domain[0], self.pot.x_domain[1])
         ax.contour(self.pot.x_plot, self.pot.y_plot, committor_on_grid, n_lines, cmap='viridis')
 
-    def ito_loss_term(self, inp, committor):
+    def ito_loss_term(self, inp, committor_t, committor_t_plus_1):
         """
 
         :param inp:           torch.tensor, ndim==2, a chunk of self.training_data or self.test_data
@@ -450,9 +450,9 @@ class TrainCommittorOverdamped:
         :return: ito_loss:
         """
         grad_xi_dot_gauss = np.sqrt(2 * self.dataset['dt'] / self.dataset['beta']) * torch.sum(
-            torch.autograd.grad(outputs=committor.sum(), inputs=inp[:, :2], retain_graph=True, create_graph=True)[0][:,
+            torch.autograd.grad(outputs=committor_t.sum(), inputs=inp, retain_graph=True, create_graph=True)[0][:,
             :2] * inp[:, 2:4], dim=1)
-        return torch.mean(torch.sum((inp[:, 4:6] - inp[:, 0:2] - grad_xi_dot_gauss) ** 2, dim=1))
+        return torch.mean(torch.sum((committor_t_plus_1 - committor_t - grad_xi_dot_gauss) ** 2, dim=1))
 
 
 class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
@@ -597,9 +597,10 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
                 # Set the gradient of with respect to parameters to zero
                 self.optimizer.zero_grad()
                 # Forward pass for boltzmann gibbs distributed points
-                committor = self.committor_model.committor(X[:, :2])
+                committor_t = self.committor_model.committor(X[:, :2])
+                committor_t_plus_1 = self.committor_model.committor(X[:, 4:6])
                 # Compute the various loss terms
-                ito_term = self.ito_loss_term(X, committor)
+                ito_term = self.ito_loss_term(X, committor_t, committor_t_plus_1)
                 l1_pen = self.l1_penalization(self.committor_model)
                 l2_pen = self.l2_penalization(self.committor_model)
                 loss = self.ito_loss_weight * ito_term + \
@@ -668,9 +669,10 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
                 # Set gradient calculation capabilities
                 X.requires_grad_()
                 # Forward pass for boltzmann gibbs distributed points
-                committor = self.committor_model.committor(X[:, :2])
+                committor_t = self.committor_model.committor(X[:, :2])
+                committor_t_plus_1 = self.committor_model.committor(X[:, 4:6])
                 # Compute the various loss terms
-                ito_term = self.ito_loss_term(X, committor)
+                ito_term = self.ito_loss_term(X, committor_t, committor_t_plus_1)
                 l1_pen = self.l1_penalization(self.committor_model)
                 l2_pen = self.l2_penalization(self.committor_model)
                 loss = self.ito_loss_weight * ito_term + \
@@ -742,9 +744,10 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
         """Print the test loss and its various components"""
         X = self.test_dataset
         X.requires_grad_()
-        committor = self.committor_model.committor(X[:, :2])
+        committor_t = self.committor_model.committor(X[:, :2])
+        committor_t_plus_1 = self.committor_model.committor(X[:, 4:6])
         # Compute the various loss terms
-        ito_term = self.ito_loss_term(X, committor)
+        ito_term = self.ito_loss_term(X, committor_t, committor_t_plus_1)
         l1_pen = self.l1_penalization(self.committor_model)
         l2_pen = self.l2_penalization(self.committor_model)
         loss = self.ito_loss_weight * ito_term + \
