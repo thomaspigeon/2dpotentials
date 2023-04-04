@@ -80,7 +80,7 @@ class OverdampedLangevin(Simulation):
             for i in range(n_time_steps):
                 x, _, _ = self.step(x)
                 x_traj.append(x)
-            trajectory["x_traj"] = np.array(x_traj)
+            trajectory["x_traj"] = np.array(x_traj).sum(axis=1)
             return trajectory
         if save_grad and not save_gauss:
             grad_traj = []
@@ -88,8 +88,8 @@ class OverdampedLangevin(Simulation):
                 x, grad, _ = self.step(x)
                 x_traj.append(x)
                 grad_traj.append(grad)
-            trajectory["x_traj"] = np.array(x_traj)
-            trajectory["grad_traj"] = np.array(grad_traj)
+            trajectory["x_traj"] = np.array(x_traj).sum(axis=1)
+            trajectory["grad_traj"] = np.array(grad_traj).sum(axis=1)
             return trajectory
         if not save_grad and save_gauss:
             gauss_traj = []
@@ -97,8 +97,8 @@ class OverdampedLangevin(Simulation):
                 x, _, gauss = self.step(x)
                 x_traj.append(x)
                 gauss_traj.append(gauss)
-            trajectory["x_traj"] = np.array(x_traj)
-            trajectory["gauss_traj"] = np.array(gauss_traj)
+            trajectory["x_traj"] = np.array(x_traj).sum(axis=1)
+            trajectory["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
             return trajectory
         if save_grad and save_gauss:
             grad_traj = []
@@ -108,9 +108,9 @@ class OverdampedLangevin(Simulation):
                 x_traj.append(x)
                 grad_traj.append(grad)
                 gauss_traj.append(gauss)
-            trajectory["x_traj"] = np.array(x_traj)
-            trajectory["grad_traj"] = np.array(grad_traj)
-            trajectory["gauss_traj"] = np.array(gauss_traj)
+            trajectory["x_traj"] = np.array(x_traj).sum(axis=1)
+            trajectory["grad_traj"] = np.array(grad_traj).sum(axis=1)
+            trajectory["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
             return trajectory
 
 class Langevin(Simulation):
@@ -206,9 +206,9 @@ class Langevin(Simulation):
                 p_traj.append(p)
                 grad_traj.append(grad)
                 gauss_traj.append(gauss)
-            trajectory["x_traj"] = np.array(x_traj)
-            trajectory["p_traj"] = np.array(p_traj)
-            trajectory["grad_traj"] = np.array(grad_traj)
-            trajectory["gauss_traj"] = np.array(gauss_traj)
+            trajectory["x_traj"] = np.array(x_traj).sum(axis=1)
+            trajectory["p_traj"] = np.array(p_traj).sum(axis=1)
+            trajectory["grad_traj"] = np.array(grad_traj).sum(axis=1)
+            trajectory["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
             return trajectory
 

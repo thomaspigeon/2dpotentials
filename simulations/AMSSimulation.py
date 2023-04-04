@@ -35,7 +35,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
             self.in_P = self.pot.in_R
 
     def set_forward(self, forward):
-        """Method to reset the whether the simulation if a forward (R -> P) ams or a backward one (P -> R)
+        """Method to reset whether the simulation if a forward (R -> P) ams or a backward one (P -> R)
 
         :param forward boolean, whether the simulation if a forward (R -> P) ams or a backward one (P -> R)
         """
@@ -114,7 +114,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                         t -= 10**6                      # The value is arbitrary, to ensure it is negative
                 if t > 0:
                     t_loop.append(t)
-            ini_traj["x_traj"] = np.array(x_traj)
+            ini_traj["x_traj"] = np.array(x_traj).sum(axis=1)
         elif save_grad and not save_gauss:
             grad_traj = []
             for i in range(n_conditions):
@@ -137,8 +137,8 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                         t -= 10**6
                 if t > 0:
                     t_loop.append(t)
-            ini_traj["x_traj"] = np.array(x_traj)
-            ini_traj["grad_traj"] = np.array(grad_traj)
+            ini_traj["x_traj"] = np.array(x_traj).sum(axis=1)
+            ini_traj["grad_traj"] = np.array(grad_traj).sum(axis=1)
         elif not save_grad and save_gauss:
             gauss_traj = []
             for i in range(n_conditions):
@@ -161,8 +161,8 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                         t -= 10**6
                 if t > 0:
                     t_loop.append(t)
-            ini_traj["x_traj"] = np.array(x_traj)
-            ini_traj["gauss_traj"] = np.array(gauss_traj)
+            ini_traj["x_traj"] = np.array(x_traj).sum(axis=1)
+            ini_traj["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
         else:
             grad_traj = []
             gauss_traj = []
@@ -187,10 +187,10 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                         x = np.random.choice(x_traj)
                 if t > 0:
                     t_loop.append(t)
-            ini_traj["x_traj"] = np.array(x_traj)
-            ini_traj["grad_traj"] = np.array(grad_traj)
-            ini_traj["gauss_traj"] = np.array(gauss_traj)
-        initials["x"] = np.array(initial_x)
+            ini_traj["x_traj"] = np.array(x_traj).sum(axis=1)
+            ini_traj["grad_traj"] = np.array(grad_traj).sum(axis=1)
+            ini_traj["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
+        initials["x"] = np.array(initial_x).sum(axis=1)
         return ini_traj, initials, np.array(t_loop), md_steps
 
     def ams_initialization(self, n_rep, initials, save_grad=False, save_gauss=False):
@@ -223,7 +223,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                     md_steps += 1
                     if self.xi(x) > z_max:
                         z_max = self.xi(x)
-                reps[i]["x_traj"] = np.array(x_traj)
+                reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
                 reps[i]["z_max"] = z_max
                 if self.in_P(x):
                     reps[i]["in_P"] = True
@@ -243,8 +243,8 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                     md_steps += 1
                     if self.xi(x) > z_max:
                         z_max = self.xi(x)
-                reps[i]["x_traj"] = np.array(x_traj)
-                reps[i]["grad_traj"] = np.array(grad_traj)
+                reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
+                reps[i]["grad_traj"] = np.array(grad_traj).sum(axis=1)
                 reps[i]["z_max"] = z_max
                 if self.in_P(x):
                     reps[i]["in_P"] = True
@@ -264,8 +264,8 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                     md_steps += 1
                     if self.xi(x) > z_max:
                         z_max = self.xi(x)
-                reps[i]["x_traj"] = np.array(x_traj)
-                reps[i]["gauss_traj"] = np.array(gauss_traj)
+                reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
+                reps[i]["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
                 reps[i]["z_max"] = z_max
                 if self.in_P(x):
                     reps[i]["in_P"] = True
@@ -287,9 +287,9 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                     md_steps += 1
                     if self.xi(x) > z_max:
                         z_max = self.xi(x)
-                reps[i]["x_traj"] = np.array(x_traj)
-                reps[i]["grad_traj"] = np.array(grad_traj)
-                reps[i]["gauss_traj"] = np.array(gauss_traj)
+                reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
+                reps[i]["grad_traj"] = np.array(grad_traj).sum(axis=1)
+                reps[i]["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
                 reps[i]["z_max"] = z_max
                 if self.in_P(x):
                     reps[i]["in_P"] = True
@@ -348,7 +348,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                     md_steps += 1
                     if self.xi(x) >= reps[i]["z_max"]:
                         reps[i]["z_max"] = self.xi(x)
-                reps[i]["x_traj"] = np.array(x_traj)
+                reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
                 else:
@@ -379,8 +379,8 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                     md_steps += 1
                     if self.xi(x) >= reps[i]["z_max"]:
                         reps[i]["z_max"] = self.xi(x)
-                reps[i]["x_traj"] = np.array(x_traj)
-                reps[i]["grad_traj"] = np.array(grad_traj)
+                reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
+                reps[i]["grad_traj"] = np.array(grad_traj).sum(axis=1)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
                 else:
@@ -411,8 +411,8 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                     md_steps += 1
                     if self.xi(x) >= reps[i]["z_max"]:
                         reps[i]["z_max"] = self.xi(x)
-                reps[i]["x_traj"] = np.array(x_traj)
-                reps[i]["gauss_traj"] = np.array(gauss_traj)
+                reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
+                reps[i]["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
                 else:
@@ -448,9 +448,9 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                     md_steps += 1
                     if self.xi(x, p) >= reps[i]["z_max"]:
                         reps[i]["z_max"] = self.xi(x, p)
-                reps[i]["x_traj"] = np.array(x_traj)
-                reps[i]["grad_traj"] = np.array(grad_traj)
-                reps[i]["gauss_traj"] = np.array(gauss_traj)
+                reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
+                reps[i]["grad_traj"] = np.array(grad_traj).sum(axis=1)
+                reps[i]["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
                 else:
@@ -532,7 +532,7 @@ class AMSLangevin(Langevin):
             self.in_P = self.pot.in_R
 
     def set_forward(self, forward):
-        """Method to reset the whether the simulation if a forward (R -> P) ams or a backward one (P -> R)
+        """Method to reset whether the simulation if a forward (R -> P) ams or a backward one (P -> R)
 
         :param forward boolean, whether the simulation if a forward (R -> P) ams or a backward one (P -> R)
         """
@@ -621,8 +621,8 @@ class AMSLangevin(Langevin):
                         t -= 10**6                      # The value is arbitrary, to ensure it is negative
                 if t > 0:
                     t_loop.append(t)
-            ini_traj["x_traj"] = np.array(x_traj)
-            ini_traj["p_traj"] = np.array(p_traj)
+            ini_traj["x_traj"] = np.array(x_traj).sum(axis=1)
+            ini_traj["p_traj"] = np.array(p_traj).sum(axis=1)
         elif save_grad and not save_gauss:
             grad_traj = []
             for i in range(n_conditions):
@@ -650,9 +650,9 @@ class AMSLangevin(Langevin):
                         t -= 10**6
                 if t > 0:
                     t_loop.append(t)
-            ini_traj["x_traj"] = np.array(x_traj)
-            ini_traj["p_traj"] = np.array(p_traj)
-            ini_traj["grad_traj"] = np.array(grad_traj)
+            ini_traj["x_traj"] = np.array(x_traj).sum(axis=1)
+            ini_traj["p_traj"] = np.array(p_traj).sum(axis=1)
+            ini_traj["grad_traj"] = np.array(grad_traj).sum(axis=1)
         elif not save_grad and save_gauss:
             gauss_traj = []
             for i in range(n_conditions):
@@ -680,9 +680,9 @@ class AMSLangevin(Langevin):
                         t -= 10**6
                 if t > 0:
                     t_loop.append(t)
-            ini_traj["x_traj"] = np.array(x_traj)
-            ini_traj["p_traj"] = np.array(p_traj)
-            ini_traj["gauss_traj"] = np.array(gauss_traj)
+            ini_traj["x_traj"] = np.array(x_traj).sum(axis=1)
+            ini_traj["p_traj"] = np.array(p_traj).sum(axis=1)
+            ini_traj["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
         else:
             grad_traj = []
             gauss_traj = []
@@ -709,12 +709,12 @@ class AMSLangevin(Langevin):
                         x = np.random.choice(x_traj)
                 if t > 0:
                     t_loop.append(t)
-            ini_traj["x_traj"] = np.array(x_traj)
-            ini_traj["p_traj"] = np.array(p_traj)
-            ini_traj["grad_traj"] = np.array(grad_traj)
-            ini_traj["gauss_traj"] = np.array(gauss_traj)
-        initials["x"] = np.array(initial_x)
-        initials["x"] = np.array(initial_p)
+            ini_traj["x_traj"] = np.array(x_traj).sum(axis=1)
+            ini_traj["p_traj"] = np.array(p_traj).sum(axis=1)
+            ini_traj["grad_traj"] = np.array(grad_traj).sum(axis=1)
+            ini_traj["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
+        initials["x"] = np.array(initial_x).sum(axis=1)
+        initials["x"] = np.array(initial_p).sum(axis=1)
         return ini_traj, initials, np.array(t_loop), md_steps
 
     def ams_initialization(self, n_rep, initials, save_grad=False, save_gauss=False):
@@ -752,8 +752,8 @@ class AMSLangevin(Langevin):
                     md_steps += 1
                     if self.xi(x, p) > z_max:
                         z_max = self.xi(x, p)
-                reps[i]["x_traj"] = np.array(x_traj)
-                reps[i]["p_traj"] = np.array(p_traj)
+                reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
+                reps[i]["p_traj"] = np.array(p_traj).sum(axis=1)
                 reps[i]["z_max"] = z_max
                 if self.in_P(x):
                     reps[i]["in_P"] = True
@@ -775,9 +775,9 @@ class AMSLangevin(Langevin):
                     md_steps += 1
                     if self.xi(x, p) > z_max:
                         z_max = self.xi(x, p)
-                reps[i]["x_traj"] = np.array(x_traj)
-                reps[i]["p_traj"] = np.array(p_traj)
-                reps[i]["grad_traj"] = np.array(grad_traj)
+                reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
+                reps[i]["p_traj"] = np.array(p_traj).sum(axis=1)
+                reps[i]["grad_traj"] = np.array(grad_traj).sum(axis=1)
                 reps[i]["z_max"] = z_max
                 if self.in_P(x):
                     reps[i]["in_P"] = True
@@ -799,9 +799,9 @@ class AMSLangevin(Langevin):
                     md_steps += 1
                     if self.xi(x, p) > z_max:
                         z_max = self.xi(x, p)
-                reps[i]["x_traj"] = np.array(x_traj)
-                reps[i]["p_traj"] = np.array(p_traj)
-                reps[i]["gauss_traj"] = np.array(gauss_traj)
+                reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
+                reps[i]["p_traj"] = np.array(p_traj).sum(axis=1)
+                reps[i]["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
                 reps[i]["z_max"] = z_max
                 if self.in_P(x):
                     reps[i]["in_P"] = True
@@ -825,10 +825,10 @@ class AMSLangevin(Langevin):
                     md_steps += 1
                     if self.xi(x, p) > z_max:
                         z_max = self.xi(x, p)
-                reps[i]["x_traj"] = np.array(x_traj)
-                reps[i]["p_traj"] = np.array(p_traj)
-                reps[i]["grad_traj"] = np.array(grad_traj)
-                reps[i]["gauss_traj"] = np.array(gauss_traj)
+                reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
+                reps[i]["p_traj"] = np.array(p_traj).sum(axis=1)
+                reps[i]["grad_traj"] = np.array(grad_traj).sum(axis=1)
+                reps[i]["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
                 reps[i]["z_max"] = z_max
                 if self.in_P(x):
                     reps[i]["in_P"] = True
@@ -894,8 +894,8 @@ class AMSLangevin(Langevin):
                     md_steps += 1
                     if self.xi(x) > z_maxs[i]:
                         z_maxs[i] = self.xi(x)
-                reps[i]["x_traj"] = np.array(x_traj)
-                reps[i]["p_traj"] = np.array(p_traj)
+                reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
+                reps[i]["p_traj"] = np.array(p_traj).sum(axis=1)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
                 else:
@@ -931,9 +931,9 @@ class AMSLangevin(Langevin):
                     md_steps += 1
                     if self.xi(x, p) >= reps[i]["z_max"]:
                         reps[i]["z_max"] = self.xi(x, p)
-                reps[i]["x_traj"] = np.array(x_traj)
-                reps[i]["p_traj"] = np.array(p_traj)
-                reps[i]["grad_traj"] = np.array(grad_traj)
+                reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
+                reps[i]["p_traj"] = np.array(p_traj).sum(axis=1)
+                reps[i]["grad_traj"] = np.array(grad_traj).sum(axis=1)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
                 else:
@@ -969,9 +969,9 @@ class AMSLangevin(Langevin):
                     md_steps += 1
                     if self.xi(x, p) >= reps[i]["z_max"]:
                         reps[i]["z_max"] = self.xi(x, p)
-                reps[i]["x_traj"] = np.array(x_traj)
-                reps[i]["p_traj"] = np.array(p_traj)
-                reps[i]["gauss_traj"] = np.array(gauss_traj)
+                reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
+                reps[i]["p_traj"] = np.array(p_traj).sum(axis=1)
+                reps[i]["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
                 else:
@@ -1011,10 +1011,10 @@ class AMSLangevin(Langevin):
                     md_steps += 1
                     if self.xi(x, p) >= reps[i]["z_max"]:
                         reps[i]["z_max"] = self.xi(x, p)
-                reps[i]["x_traj"] = np.array(x_traj)
-                reps[i]["p_traj"] = np.array(p_traj)
-                reps[i]["grad_traj"] = np.array(grad_traj)
-                reps[i]["gauss_traj"] = np.array(gauss_traj)
+                reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
+                reps[i]["p_traj"] = np.array(p_traj).sum(axis=1)
+                reps[i]["grad_traj"] = np.array(grad_traj).sum(axis=1)
+                reps[i]["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
                 else:
