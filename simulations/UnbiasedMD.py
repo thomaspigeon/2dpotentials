@@ -58,7 +58,7 @@ class OverdampedLangevin(Simulation):
         :return: gauss: np.array, ndim==2, shape==[1, 2], gaussian drawn from r
         """
         grad = self.pot.nabla_V(x)
-        gauss = self.r.normal(size=(x.shape[1]))
+        gauss = self.r.normal(size=(x.shape))
         x = x - grad * self.dt + np.sqrt(2 * self.dt / self.beta) * gauss
         return x, grad, gauss
 
@@ -140,7 +140,7 @@ class Langevin(Simulation):
         :return: grad:  np.array, ndim==2, shape==[1, 2], forces acting on x
         :return: gauss: np.array, ndim==2, shape==[1, 2], gaussian drawn from r
         """
-        gauss = self.r.normal(size=(x.shape[1]))
+        gauss = self.r.normal(size=(x.shape))
         p = p - (self.dt / 2) * self.pot.nabla_V(x)
         x = x + (self.dt / 2) * p / self.M
         p = np.exp(- self.gamma * self.dt) * p + \
