@@ -217,7 +217,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                 reps[i]["weight"] = [1 / n_rep]
                 x = initials["x"][i: i+1]
                 z_max = self.xi(x)
-                while not self.in_R(x) or not self.in_P(x):     # until they reach either R or P
+                while not self.in_R(x) and not self.in_P(x):     # until they reach either R or P
                     x, _, _ = self.step(x)
                     x_traj.append(x)
                     md_steps += 1
@@ -236,7 +236,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                 reps[i]["weight"] = [1 / n_rep]
                 x = initials["x"][i: i + 1]
                 z_max = self.xi(x)
-                while not self.in_R(x) or not self.in_P(x):  # until they reach either R or P
+                while not self.in_R(x) and not self.in_P(x):  # until they reach either R or P
                     x, grad, _ = self.step(x)
                     x_traj.append(x)
                     grad_traj.append(grad)
@@ -257,7 +257,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                 reps[i]["weight"] = [1 / n_rep]
                 x = initials["x"][i: i + 1]
                 z_max = self.xi(x)
-                while not self.in_R(x) or not self.in_P(x):  # until they reach either R or P
+                while not self.in_R(x) and not self.in_P(x):  # until they reach either R or P
                     x, _, gauss = self.step(x)
                     x_traj.append(x)
                     gauss_traj.append(gauss)
@@ -745,7 +745,7 @@ class AMSLangevin(Langevin):
                 x = initials["x"][i: i+1]
                 p = initials["p"][i: i+1]
                 z_max = self.xi(x, p)
-                while not self.in_R(x) or not self.in_P(x):     # until they reach either R or P
+                while not self.in_R(x) and not self.in_P(x):     # until they reach either R or P
                     x, p, _, _ = self.step(x, p)
                     x_traj.append(x)
                     p_traj.append(p)
@@ -767,7 +767,7 @@ class AMSLangevin(Langevin):
                 x = initials["x"][i: i + 1]
                 p = initials["p"][i: i + 1]
                 z_max = self.xi(x, p)
-                while not self.in_R(x) or not self.in_P(x):  # until they reach either R or P
+                while not self.in_R(x) and not self.in_P(x):  # until they reach either R or P
                     x, p, grad, _ = self.step(x, p)
                     x_traj.append(x)
                     p_traj.append(p)
@@ -791,7 +791,7 @@ class AMSLangevin(Langevin):
                 x = initials["x"][i: i + 1]
                 p = initials["p"][i: i + 1]
                 z_max = self.xi(x, p)
-                while not self.in_R(x) or not self.in_P(x):  # until they reach either R or P
+                while not self.in_R(x) and not self.in_P(x):  # until they reach either R or P
                     x, p, _, gauss = self.step(x, p)
                     x_traj.append(x)
                     p_traj.append(p)
