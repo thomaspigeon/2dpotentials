@@ -40,8 +40,8 @@ class General2DPotential:
         self.y_plot = None
         self.x2d = None
         self.set_2D_plot_grid_precision(n_bins_x, n_bins_y)
-        self.SigmaR_position = 1.1
-        self.SigmaP_position = 1.1
+        self.SigmaR_position = 2.0
+        self.SigmaP_position = 2.0
 
     def set_minR(self, minR):
         """Allows to reset the position of the center of state R
