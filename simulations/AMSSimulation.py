@@ -226,7 +226,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                         z_max = self.xi(x)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
-                    z_max = 10 ** 8
+                    z_max = np.array([10 ** 8])
                 else:
                     reps[i]["in_P"] = False
                 reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
@@ -248,7 +248,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                         z_max = self.xi(x)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
-                    z_max = 10 ** 8
+                    z_max = np.array([10 ** 8])
                 else:
                     reps[i]["in_P"] = False
                 reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
@@ -271,7 +271,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                         z_max = self.xi(x)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
-                    z_max = 10 ** 8
+                    z_max = np.array([10 ** 8])
                 else:
                     reps[i]["in_P"] = False
                 reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
@@ -296,7 +296,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                         z_max = self.xi(x)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
-                    z_max = 10 ** 8
+                    z_max = np.array([10 ** 8])
                 else:
                     reps[i]["in_P"] = False
                 reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
@@ -359,7 +359,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                 reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
-                    reps[i]["z_max"] = 10 ** 8
+                    reps[i]["z_max"] = np.array([10 ** 8])
                 else:
                     reps[i]["in_P"] = False
         elif save_grad and not save_gauss:
@@ -392,7 +392,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                 reps[i]["grad_traj"] = np.array(grad_traj).sum(axis=1)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
-                    reps[i]["z_max"] = 10 ** 8
+                    reps[i]["z_max"] = np.array([10 ** 8])
                 else:
                     reps[i]["in_P"] = False
         elif not save_grad and save_gauss:
@@ -425,7 +425,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                 reps[i]["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
-                    reps[i]["z_max"] = 10 ** 8
+                    reps[i]["z_max"] = np.array([10 ** 8])
                 else:
                     reps[i]["in_P"] = False
         else:
@@ -464,7 +464,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                 reps[i]["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
-                    reps[i]["z_max"] = 10 ** 8
+                    reps[i]["z_max"] = np.array([10 ** 8])
                 else:
                     reps[i]["in_P"] = False
         return reps, killed_trajs, z_kill, md_steps
@@ -770,7 +770,7 @@ class AMSLangevin(Langevin):
                         z_max = self.xi(x, p)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
-                    z_max = 10 ** 8
+                    z_max = np.array([10 ** 8])
                 else:
                     reps[i]["in_P"] = False
                 reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
@@ -796,7 +796,7 @@ class AMSLangevin(Langevin):
                         z_max = self.xi(x, p)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
-                    z_max = 10 ** 8
+                    z_max = np.array([10 ** 8])
                 else:
                     reps[i]["in_P"] = False
                 reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
@@ -823,7 +823,7 @@ class AMSLangevin(Langevin):
                         z_max = self.xi(x, p)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
-                    z_max = 10 ** 8
+                    z_max = np.array([10 ** 8])
                 else:
                     reps[i]["in_P"] = False
                 reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
@@ -852,7 +852,7 @@ class AMSLangevin(Langevin):
                         z_max = self.xi(x, p)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
-                    z_max = 10 ** 8
+                    z_max = np.array([10 ** 8])
                 else:
                     reps[i]["in_P"] = False
                 reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
@@ -924,7 +924,7 @@ class AMSLangevin(Langevin):
                 reps[i]["p_traj"] = np.array(p_traj).sum(axis=1)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
-                    reps[i]["z_max"] = 10 ** 8
+                    reps[i]["z_max"] = np.array([10 ** 8])
                 else:
                     reps[i]["in_P"] = False
         elif save_grad and not save_gauss:
@@ -963,7 +963,7 @@ class AMSLangevin(Langevin):
                 reps[i]["grad_traj"] = np.array(grad_traj).sum(axis=1)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
-                    reps[i]["z_max"] = 10 ** 8
+                    reps[i]["z_max"] = np.array([10 ** 8])
                 else:
                     reps[i]["in_P"] = False
         elif not save_grad and save_gauss:
@@ -1002,7 +1002,7 @@ class AMSLangevin(Langevin):
                 reps[i]["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
-                    reps[i]["z_max"] = 10 ** 8
+                    reps[i]["z_max"] = np.array([10 ** 8])
                 else:
                     reps[i]["in_P"] = False
         else:
@@ -1046,7 +1046,7 @@ class AMSLangevin(Langevin):
                 reps[i]["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
                 if self.in_P(x):
                     reps[i]["in_P"] = True
-                    reps[i]["z_max"] = 10 ** 8
+                    reps[i]["z_max"] = np.array([10 ** 8])
                 else:
                     reps[i]["in_P"] = False
         return reps, killed_trajs, z_kill, md_steps
