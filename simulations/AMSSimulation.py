@@ -209,12 +209,12 @@ class AMSOverdampedLangevin(OverdampedLangevin):
         """
         reps = []
         md_steps = 0
-        x_traj = []
         # Four different cases depending on the values to store in memory
         if not save_grad and not save_gauss:
             for i in range(n_rep):                              # run the n_rep trajectories
                 reps.append({})
                 reps[i]["weight"] = [1 / n_rep]
+                x_traj = []
                 x = initials["x"][i: i+1]
                 z_max = self.xi(x)
                 while not self.in_R(x) and not self.in_P(x):     # until they reach either R or P
@@ -230,10 +230,11 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                 else:
                     reps[i]["in_P"] = False
         elif save_grad and not save_gauss:
-            grad_traj = []
             for i in range(n_rep):  # run the n_rep trajectories
                 reps.append({})
                 reps[i]["weight"] = [1 / n_rep]
+                x_traj = []
+                grad_traj = []
                 x = initials["x"][i: i + 1]
                 z_max = self.xi(x)
                 while not self.in_R(x) and not self.in_P(x):  # until they reach either R or P
@@ -251,10 +252,11 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                 else:
                     reps[i]["in_P"] = False
         elif not save_grad and save_gauss:
-            gauss_traj = []
             for i in range(n_rep):  # run the n_rep trajectories
                 reps.append({})
                 reps[i]["weight"] = [1 / n_rep]
+                x_traj = []
+                gauss_traj = []
                 x = initials["x"][i: i + 1]
                 z_max = self.xi(x)
                 while not self.in_R(x) and not self.in_P(x):  # until they reach either R or P
@@ -272,11 +274,12 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                 else:
                     reps[i]["in_P"] = False
         else:
-            grad_traj = []
-            gauss_traj = []
             for i in range(n_rep):  # run the n_rep trajectories
                 reps.append({})
                 reps[i]["weight"] = [1 / n_rep]
+                x_traj = []
+                grad_traj = []
+                gauss_traj = []
                 x = initials["x"][i: i + 1]
                 z_max = self.xi(x)
                 while not self.in_R(x) and not self.in_P(x):  # until they reach either R or P
@@ -736,13 +739,13 @@ class AMSLangevin(Langevin):
         """
         reps = []
         md_steps = 0
-        x_traj = []
-        p_traj = []
         # Four different cases depending on the values to store in memory
         if not save_grad and not save_gauss:
             for i in range(n_rep):                              # run the n_rep trajectories
                 reps.append({})
                 reps[i]["weight"] = [1 / n_rep]
+                x_traj = []
+                p_traj = []
                 x = initials["x"][i: i+1]
                 p = initials["p"][i: i+1]
                 z_max = self.xi(x, p)
@@ -761,10 +764,12 @@ class AMSLangevin(Langevin):
                 else:
                     reps[i]["in_P"] = False
         elif save_grad and not save_gauss:
-            grad_traj = []
             for i in range(n_rep):  # run the n_rep trajectories
                 reps.append({})
                 reps[i]["weight"] = [1 / n_rep]
+                x_traj = []
+                p_traj = []
+                grad_traj = []
                 x = initials["x"][i: i + 1]
                 p = initials["p"][i: i + 1]
                 z_max = self.xi(x, p)
@@ -785,10 +790,12 @@ class AMSLangevin(Langevin):
                 else:
                     reps[i]["in_P"] = False
         elif not save_grad and save_gauss:
-            gauss_traj = []
             for i in range(n_rep):  # run the n_rep trajectories
                 reps.append({})
                 reps[i]["weight"] = [1 / n_rep]
+                x_traj = []
+                p_traj = []
+                gauss_traj = []
                 x = initials["x"][i: i + 1]
                 p = initials["p"][i: i + 1]
                 z_max = self.xi(x, p)
@@ -809,11 +816,13 @@ class AMSLangevin(Langevin):
                 else:
                     reps[i]["in_P"] = False
         else:
-            grad_traj = []
-            gauss_traj = []
             for i in range(n_rep):  # run the n_rep trajectories
                 reps.append({})
                 reps[i]["weight"] = [1 / n_rep]
+                x_traj = []
+                p_traj = []
+                grad_traj = []
+                gauss_traj = []
                 x = initials["x"][i: i + 1]
                 p = initials["p"][i: i + 1]
                 z_max = self.xi(x, p)
