@@ -33,7 +33,6 @@ class MullerBrown(General2DPotential):
         """
         :param x: float, x coordinate
         :param y: float, y coordinate
-
         :return: dVx: float, derivative of the potential with respect to x
         """
         a = -200 * (2 * (-1) * (x - 1) + 0 * (y - 0)) * np.exp(
@@ -51,7 +50,6 @@ class MullerBrown(General2DPotential):
         """
         :param x: float, x coordinate
         :param y: float, y coordinate
-
         :return: dVy: float, derivative of the potential with respect to y
         """
         a = -200 * (2 * (-10) * (y - 0) + 0 * (x - 1)) * np.exp(
@@ -75,5 +73,6 @@ class MullerBrown(General2DPotential):
         assert (X.ndim == 2)
         assert (X.shape[1] == 2)
         return np.column_stack((self.dV_x(X[:, 0], X[:, 1]), self.dV_y(X[:, 0], X[:, 1])))
+
 
 
