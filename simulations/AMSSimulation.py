@@ -490,7 +490,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                 if i in killed:
                     reps[i]["weight"] = [p / n_rep]
                     if return_all:
-                        replicas.append([reps[i]])
+                        replicas.append(reps[i])
                 else:
                     reps[i]["weight"].append(p / n_rep)
         replicas += reps
@@ -1054,7 +1054,7 @@ class AMSLangevin(Langevin):
                 if i in killed:
                     reps[i]["weight"] = [p / n_rep]
                     if return_all:
-                        replicas.append([reps[i]])
+                        replicas.append(reps[i])
                 else:
                     reps[i]["weight"].append(p / n_rep)
         replicas += reps
