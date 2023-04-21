@@ -493,7 +493,8 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                         replicas.append(reps[i])
                 else:
                     reps[i]["weight"].append(p / n_rep)
-        replicas += reps
+        if len(killed) != n_rep:
+            replicas += reps
         return p, z_kills, replicas, total_md_steps
 
 
@@ -1057,5 +1058,6 @@ class AMSLangevin(Langevin):
                         replicas.append(reps[i])
                 else:
                     reps[i]["weight"].append(p / n_rep)
-        replicas += reps
+        if len(killed) != n_rep:
+            replicas += reps
         return p, z_kills, replicas, total_md_steps
