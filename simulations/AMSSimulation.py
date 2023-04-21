@@ -110,7 +110,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                     md_steps += 1
                     t += 1
                     if self.in_P(x):                    # if the dynamics reaches P, branch at a random previous time
-                        x = np.random.choice(x_traj)
+                        x = x_traj[np.random.choice(len(x_traj)-1)]
                         t -= 10**6                      # The value is arbitrary, to ensure it is negative
                 if t > 0:
                     t_loop.append(t)
@@ -133,7 +133,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                     md_steps += 1
                     t += 1
                     if self.in_P(x):
-                        x = np.random.choice(x_traj)
+                        x = x_traj[np.random.choice(len(x_traj)-1)]
                         t -= 10**6
                 if t > 0:
                     t_loop.append(t)
@@ -157,7 +157,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                     md_steps += 1
                     t += 1
                     if self.in_P(x):
-                        x = np.random.choice(x_traj)
+                        x = x_traj[np.random.choice(len(x_traj)-1)]
                         t -= 10**6
                 if t > 0:
                     t_loop.append(t)
@@ -184,7 +184,8 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                     md_steps += 1
                     t += 1
                     if self.in_P(x):
-                        x = np.random.choice(x_traj)
+                        x = x_traj[np.random.choice(len(x_traj)-1)]
+                        t -= 10 ** 6
                 if t > 0:
                     t_loop.append(t)
             ini_traj["x_traj"] = np.array(x_traj).sum(axis=1)
@@ -619,7 +620,7 @@ class AMSLangevin(Langevin):
                     md_steps += 1
                     t += 1
                     if self.in_P(x):                    # if the dynamics reaches P, branch at a random previous time
-                        index = np.random.choice(range(len(x_traj)))
+                        index = np.random.choice(len(x_traj))
                         x = x_traj[index]
                         p = p_traj[index]
                         t -= 10**6                      # The value is arbitrary, to ensure it is negative
@@ -648,7 +649,7 @@ class AMSLangevin(Langevin):
                     md_steps += 1
                     t += 1
                     if self.in_P(x):
-                        index = np.random.choice(range(len(x_traj)))
+                        index = np.random.choice(len(x_traj))
                         x = x_traj[index]
                         p = p_traj[index]
                         t -= 10**6
@@ -678,7 +679,7 @@ class AMSLangevin(Langevin):
                     md_steps += 1
                     t += 1
                     if self.in_P(x):
-                        index = np.random.choice(range(len(x_traj)))
+                        index = np.random.choice(len(x_traj))
                         x = x_traj[index]
                         p = p_traj[index]
                         t -= 10**6
@@ -710,7 +711,10 @@ class AMSLangevin(Langevin):
                     md_steps += 1
                     t += 1
                     if self.in_P(x):
-                        x = np.random.choice(x_traj)
+                        index = np.random.choice(len(x_traj))
+                        x = x_traj[index]
+                        p = p_traj[index]
+                        t -= 10 ** 6
                 if t > 0:
                     t_loop.append(t)
             ini_traj["x_traj"] = np.array(x_traj).sum(axis=1)
