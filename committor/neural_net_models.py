@@ -55,7 +55,7 @@ class CommittorOneDecoder(torch.nn.Module):
         committor = (1 - self.inR(inp)) * ((1 - self.inP(inp)) * self.encoder(inp) + self.inP(inp))
         return committor
 
-    def xi(self,  x):
+    def xi_forward(self,  x):
         """Collective variable defined through an auto encoder model
 
         :param x: np.array, position, ndim = 2, shape = [any, 2]
@@ -65,6 +65,17 @@ class CommittorOneDecoder(torch.nn.Module):
         if not torch.is_tensor(x):
             x = torch.from_numpy(x).float()
         return self.committor(x).detach().numpy()
+
+    def xi_backward(self,  x):
+        """Collective variable defined through an auto encoder model
+
+        :param x: np.array, position, ndim = 2, shape = [any, 2]
+        :return: xi: np.array, ndim = 2, shape = [any, 1]
+        """
+        self.eval()
+        if not torch.is_tensor(x):
+            x = torch.from_numpy(x).float()
+        return 1 - self.committor(x).detach().numpy()
 
     def grad_xi(self, x):
         """Gradient of the collective variable defined through an auto encoder model
