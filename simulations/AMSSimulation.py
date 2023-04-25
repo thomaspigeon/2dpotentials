@@ -329,7 +329,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
         md_steps = 0
         z_maxs = np.array([reps[i]["z_max"] for i in range(len(reps))])
         z_kill = np.sort(z_maxs, axis=0)[k_min - 1]
-        killed_trajs = np.where(z_maxs - z_kill <= - self.threshold)[0].tolist()
+        killed_trajs = np.where(z_maxs - z_kill <= self.threshold)[0].tolist()
         killed = killed_trajs.copy()
         alive = np.setdiff1d(range(len(reps)), killed)
         if len(alive) == 0:                                             # Extinction case
@@ -888,7 +888,7 @@ class AMSLangevin(Langevin):
         md_steps = 0
         z_maxs = np.array([reps[i]["z_max"] for i in range(len(reps))])
         z_kill = np.sort(z_maxs, axis=0)[k_min - 1]
-        killed_trajs = np.where(z_maxs - z_kill <= - self.threshold)[0].tolist()
+        killed_trajs = np.where(z_maxs - z_kill <= self.threshold)[0].tolist()
         killed = killed_trajs.copy()
         alive = np.setdiff1d(range(len(reps)), killed)
         if len(alive) == 0:                                             # Extinction case
