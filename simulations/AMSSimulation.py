@@ -41,6 +41,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
         :param forward boolean, whether the simulation if a forward (R -> P) ams or a backward one (P -> R)
         """
         self.forward = forward
+        self.ini_x = None
         if forward:
             self.in_R = self.pot.in_R
             self.above_Sigma = self.pot.above_SigmaR
@@ -562,6 +563,8 @@ class AMSLangevin(Langevin):
         :param forward boolean, whether the simulation if a forward (R -> P) ams or a backward one (P -> R)
         """
         self.forward = forward
+        self.ini_x = None
+        self.ini_p = None
         if forward:
             self.in_R = self.pot.in_R
             self.above_Sigma = self.pot.above_SigmaR
