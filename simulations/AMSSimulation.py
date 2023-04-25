@@ -33,6 +33,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
             self.in_R = self.pot.in_P
             self.above_Sigma = self.pot.above_SigmaP
             self.in_P = self.pot.in_R
+        self.ini_x = None
 
     def set_forward(self, forward):
         """Method to reset whether the simulation if a forward (R -> P) ams or a backward one (P -> R)
@@ -78,16 +79,16 @@ class AMSOverdampedLangevin(OverdampedLangevin):
         :return md_steps        int, number of md steps done
         """
         # Set the initial position of the dynamics
-        if self.forward:
-            x = self.pot.minR
-        else:
-            x = self.pot.minP
-        if x_0 is not None:
-            x = x_0
+
+        if self.ini_x is None:
+            if self.forward:
+                self.ini_x = self.pot.minR
+            else:
+                self.ini_x = self.pot.minP
         md_steps = 0
         # First make sure the trajectory stats in R by running dynamics until R is reached
-        while not self.in_R(x):
-            x, _, _ = self.step(x)
+        while not self.in_R(self.ini_x):
+            self.ini_x, _, _ = self.step(self.ini_x)
             md_steps += 1
         initial_x = []
         x_traj = []
@@ -98,99 +99,108 @@ class AMSOverdampedLangevin(OverdampedLangevin):
         if not save_grad and not save_gauss:
             for i in range(n_conditions):               # run until the required number of initial condition is sampled
                 t = 0
-                while not self.above_Sigma(x):          # run util the dynamics reaches SigmaR
-                    x, _, _ = self.step(x)
-                    x_traj.append(x)
+                while not self.above_Sigma(self.ini_x):          # run util the dynamics reaches SigmaR
+                    self.ini_x, _, _ = self.step(self.ini_x)
+                    x_traj.append(self.ini_x)
                     md_steps += 1
                     t += 1
-                initial_x.append(x)
-                while not self.in_R(x):                 # run until the dynamics goes back to R
-                    x, _, _ = self.step(x)
-                    x_traj.append(x)
+                initial_x.append(self.ini_x)
+                while not self.in_R(self.ini_x):                 # run until the dynamics goes back to R
+                    self.ini_x, _, _ = self.step(self.ini_x)
+                    x_traj.append(self.ini_x)
                     md_steps += 1
                     t += 1
-                    if self.in_P(x):                    # if the dynamics reaches P, branch at a random previous time
-                        x = x_traj[np.random.choice(len(x_traj)-1)]
+                    if self.in_P(self.ini_x):                    # if the dynamics reaches P, branch at a random previous time
+                        self.ini_x = x_traj[np.random.choice(len(x_traj)-1)]
                         t -= 10**6                      # The value is arbitrary, to ensure it is negative
                 if t > 0:
                     t_loop.append(t)
-            ini_traj["x_traj"] = np.array(x_traj).sum(axis=1)
         elif save_grad and not save_gauss:
             grad_traj = []
+            initial_grad = []
             for i in range(n_conditions):
                 t = 0
-                while not self.above_Sigma(x):
-                    x, grad, _ = self.step(x)
-                    x_traj.append(x)
+                while not self.above_Sigma(self.ini_x):
+                    self.ini_x, grad, _ = self.step(self.ini_x)
+                    x_traj.append(self.ini_x)
                     grad_traj.append(grad)
                     md_steps += 1
                     t += 1
-                initial_x.append(x)
+                initial_x.append(self.ini_x)
+                initial_grad.append(grad)
                 while not self.in_R(x):
-                    x, grad, _ = self.step(x)
-                    x_traj.append(x)
+                    self.ini_x, grad, _ = self.step(self.ini_x)
+                    x_traj.append(self.ini_x)
                     grad_traj.append(grad)
                     md_steps += 1
                     t += 1
-                    if self.in_P(x):
-                        x = x_traj[np.random.choice(len(x_traj)-1)]
+                    if self.in_P(self.ini_x):
+                        self.ini_x = x_traj[np.random.choice(len(x_traj)-1)]
                         t -= 10**6
                 if t > 0:
                     t_loop.append(t)
-            ini_traj["x_traj"] = np.array(x_traj).sum(axis=1)
             ini_traj["grad_traj"] = np.array(grad_traj).sum(axis=1)
+            initials["grad"] = np.array(initial_grad).sum(axis=1)
         elif not save_grad and save_gauss:
             gauss_traj = []
+            initial_gauss = []
             for i in range(n_conditions):
                 t = 0
-                while not self.above_Sigma(x):
-                    x, _, gauss = self.step(x)
-                    x_traj.append(x)
+                while not self.above_Sigma(self.ini_x):
+                    self.ini_x, _, gauss = self.step(self.ini_x)
+                    x_traj.append(self.ini_x)
                     gauss_traj.append(gauss)
                     md_steps += 1
                     t += 1
-                initial_x.append(x)
-                while not self.in_R(x):
-                    x, _, gauss = self.step(x)
-                    x_traj.append(x)
+                initial_x.append(self.ini_x)
+                initial_gauss.append(gauss)
+                while not self.in_R(self.ini_x):
+                    self.ini_x, _, gauss = self.step(self.ini_x)
+                    x_traj.append(self.ini_x)
                     gauss_traj.append(gauss)
                     md_steps += 1
                     t += 1
-                    if self.in_P(x):
-                        x = x_traj[np.random.choice(len(x_traj)-1)]
+                    if self.in_P(self.ini_x):
+                        self.ini_x = x_traj[np.random.choice(len(x_traj)-1)]
                         t -= 10**6
                 if t > 0:
                     t_loop.append(t)
-            ini_traj["x_traj"] = np.array(x_traj).sum(axis=1)
             ini_traj["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
+            initials["gauss"] = np.array(initial_gauss).sum(axis=1)
         else:
             grad_traj = []
+            initial_grad = []
             gauss_traj = []
+            initial_gauss = []
             for i in range(n_conditions):
                 t = 0
-                while not self.above_Sigma(x):
-                    x, grad, gauss = self.step(x)
-                    x_traj.append(x)
+                while not self.above_Sigma(self.ini_x):
+                    self.ini_x, grad, gauss = self.step(self.ini_x)
+                    x_traj.append(self.ini_x)
                     grad_traj.append(grad)
                     gauss_traj.append(gauss)
                     md_steps += 1
                     t += 1
-                initial_x.append(x)
-                while not self.in_R(x):
-                    x, grad, gauss = self.step(x)
-                    x_traj.append(x)
+                initial_x.append(self.ini_x)
+                initial_grad.append(grad)
+                initial_gauss.append(gauss)
+                while not self.in_R(self.ini_x):
+                    self.ini_x, grad, gauss = self.step(self.ini_x)
+                    x_traj.append(self.ini_x)
                     grad_traj.append(grad)
                     gauss_traj.append(gauss)
                     md_steps += 1
                     t += 1
-                    if self.in_P(x):
-                        x = x_traj[np.random.choice(len(x_traj)-1)]
+                    if self.in_P(self.ini_x):
+                        self.ini_x = x_traj[np.random.choice(len(x_traj)-1)]
                         t -= 10 ** 6
                 if t > 0:
                     t_loop.append(t)
-            ini_traj["x_traj"] = np.array(x_traj).sum(axis=1)
             ini_traj["grad_traj"] = np.array(grad_traj).sum(axis=1)
+            initials["grad"] = np.array(initial_grad).sum(axis=1)
             ini_traj["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
+            initials["gauss"] = np.array(initial_gauss).sum(axis=1)
+        ini_traj["x_traj"] = np.array(x_traj).sum(axis=1)
         initials["x"] = np.array(initial_x).sum(axis=1)
         return ini_traj, initials, np.array(t_loop), md_steps
 
@@ -217,6 +227,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                 reps[i]["weight"] = [1 / n_rep]
                 x_traj = []
                 x = initials["x"][i: i+1]
+                x_traj.append(x)
                 z_max = self.xi(x)
                 while not self.in_R(x) and not self.in_P(x):     # until they reach either R or P
                     x, _, _ = self.step(x)
@@ -238,6 +249,8 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                 x_traj = []
                 grad_traj = []
                 x = initials["x"][i: i + 1]
+                x_traj.append(x)
+                grad_traj.append(initials["grad"][i: i + 1])
                 z_max = self.xi(x)
                 while not self.in_R(x) and not self.in_P(x):  # until they reach either R or P
                     x, grad, _ = self.step(x)
@@ -261,6 +274,8 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                 x_traj = []
                 gauss_traj = []
                 x = initials["x"][i: i + 1]
+                x_traj.append(x)
+                gauss_traj.append(initials["gauss"][i: i + 1])
                 z_max = self.xi(x)
                 while not self.in_R(x) and not self.in_P(x):  # until they reach either R or P
                     x, _, gauss = self.step(x)
@@ -285,6 +300,9 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                 grad_traj = []
                 gauss_traj = []
                 x = initials["x"][i: i + 1]
+                x_traj.append(x)
+                grad_traj.append(initials["grad"][i: i + 1])
+                gauss_traj.append(initials["gauss"][i: i + 1])
                 z_max = self.xi(x)
                 while not self.in_R(x) and not self.in_P(x):  # until they reach either R or P
                     x, grad, gauss = self.step(x)
@@ -341,6 +359,7 @@ class AMSOverdampedLangevin(OverdampedLangevin):
                 x_traj = []
                 k = 0
                 reps[i]["z_max"] = self.xi(reps[j]["x_traj"][k:k + 1])
+
                 while self.xi(reps[j]["x_traj"][k:k + 1]) < z_kill:
                     x_traj.append(reps[j]["x_traj"][k:k + 1])
                     if self.xi(reps[j]["x_traj"][k:k + 1]) >= reps[i]["z_max"]:
@@ -543,6 +562,8 @@ class AMSLangevin(Langevin):
             self.in_R = self.pot.in_P
             self.above_Sigma = self.pot.above_SigmaP
             self.in_P = self.pot.in_R
+        self.ini_x = None
+        self.ini_p = None
 
     def set_forward(self, forward):
         """Method to reset whether the simulation if a forward (R -> P) ams or a backward one (P -> R)
@@ -568,13 +589,11 @@ class AMSLangevin(Langevin):
         """
         self.xi = xi
 
-    def sample_initial_conditions(self, n_conditions, x_0=None, save_grad=False, save_gauss=False):
+    def sample_initial_conditions(self, n_conditions, save_grad=False, save_gauss=False):
         """Simple md to sample initial conditions, if it reaches the product state, the next position is one of the
         previously seen configuration during the .
 
         :param n_conditions:    int, number of initial conditions to sample
-        :param x_0:             np.array, ndim==2, shape==[1, 2], initial position (if not given, the center of R
-                                (if self.forward==True) or P (if self.forward==False) is taken
         :param save_grad:       boolean, whether the forces should be saved
         :param save_gauss:      boolean, whether the gaussian should be saved
         :return: ini_traj:      dict, ini_traj["x_traj"] is the trajectory of the positions, ini_traj["p_traj"] is the
@@ -589,18 +608,18 @@ class AMSLangevin(Langevin):
         :return md_steps        int, number of md steps done
         """
         # Set the initial position of the dynamics
-        if self.forward:
-            x = self.pot.minR
-        else:
-            x = self.pot.minP
-        if x_0 is not None:
-            x = x_0
-        p = np.sqrt(self.M / self.beta) * self.r.normal(size=(x.shape[1]))
+        if self.ini_x is None:
+            if self.forward:
+                self.ini_x = self.pot.minR
+            else:
+                self.ini_x = self.pot.minP
+        if self.ini_p is None:
+            self.ini_p = np.sqrt(self.M / self.beta) * self.r.normal(size=(self.ini_x.shape[1]))
         md_steps = 0
 
         # First make sure the trajectory stats in R by running dynamics until R is reached
-        while not self.in_R(x):
-            x, p, _, _ = self.step(x, p)
+        while not self.in_R(self.ini_x):
+            self.ini_x, self.ini_p, _, _ = self.step(self.ini_x, self.ini_p)
             md_steps += 1
         t_loop = []
         initial_x = []
@@ -613,124 +632,131 @@ class AMSLangevin(Langevin):
         if not save_grad and not save_gauss:
             for i in range(n_conditions):               # run until the required number of initial condition is sampled
                 t = 0
-                while not self.above_Sigma(x):          # run util the dynamics reaches SigmaR
-                    x, p, _, _ = self.step(x, p)
-                    x_traj.append(x)
-                    p_traj.append(p)
+                while not self.above_Sigma(self.ini_x):          # run util the dynamics reaches SigmaR
+                    self.ini_x, self.ini_p, _, _ = self.step(self.ini_x, self.ini_p)
+                    x_traj.append(self.ini_x)
+                    p_traj.append(self.ini_p)
                     md_steps += 1
                     t += 1
-                initial_x.append(x)
-                initial_p.append(p)
-                while not self.in_R(x):                 # run until the dynamics goes back to R
-                    x, p, _, _ = self.step(x, p)
-                    x_traj.append(x)
-                    p_traj.append(p)
+                initial_x.append(self.ini_x)
+                initial_p.append(self.ini_p)
+                while not self.in_R(self.ini_x):                 # run until the dynamics goes back to R
+                    self.ini_x, self.ini_p, _, _ = self.step(self.ini_x, self.ini_p)
+                    x_traj.append(self.ini_x)
+                    p_traj.append(self.ini_p)
                     md_steps += 1
                     t += 1
-                    if self.in_P(x):                    # if the dynamics reaches P, branch at a random previous time
+                    if self.in_P(self.ini_x):         # if the dynamics reaches P, branch at a random previous time
                         index = np.random.choice(len(x_traj))
-                        x = x_traj[index]
-                        p = p_traj[index]
+                        self.ini_x = x_traj[index]
+                        self.ini_p = p_traj[index]
                         t -= 10**6                      # The value is arbitrary, to ensure it is negative
                 if t > 0:
                     t_loop.append(t)
-            ini_traj["x_traj"] = np.array(x_traj).sum(axis=1)
-            ini_traj["p_traj"] = np.array(p_traj).sum(axis=1)
         elif save_grad and not save_gauss:
             grad_traj = []
+            initial_grad = []
             for i in range(n_conditions):
                 t = 0
-                while not self.above_Sigma(x):
-                    x, p, grad, _ = self.step(x, p)
-                    x_traj.append(x)
-                    p_traj.append(p)
+                while not self.above_Sigma(self.ini_x):
+                    self.ini_x, self.ini_p, grad, _ = self.step(self.ini_x, self.ini_p)
+                    x_traj.append(self.ini_x)
+                    p_traj.append(self.ini_p)
                     grad_traj.append(grad)
                     md_steps += 1
                     t += 1
-                initial_x.append(x)
-                initial_p.append(p)
-                while not self.in_R(x):
-                    x, p, grad, _ = self.step(x, p)
-                    x_traj.append(x)
-                    p_traj.append(p)
+                initial_x.append(self.ini_x)
+                initial_p.append(self.ini_p)
+                initial_grad.append(grad)
+                while not self.in_R(self.ini_p):
+                    self.ini_x, self.ini_p, grad, _ = self.step(self.ini_x, self.ini_p)
+                    x_traj.append(self.ini_x)
+                    p_traj.append(self.ini_p)
                     grad_traj.append(grad)
                     md_steps += 1
                     t += 1
-                    if self.in_P(x):
+                    if self.in_P(self.ini_x):
                         index = np.random.choice(len(x_traj))
-                        x = x_traj[index]
-                        p = p_traj[index]
+                        self.ini_x = x_traj[index]
+                        self.ini_p = p_traj[index]
                         t -= 10**6
                 if t > 0:
                     t_loop.append(t)
-            ini_traj["x_traj"] = np.array(x_traj).sum(axis=1)
-            ini_traj["p_traj"] = np.array(p_traj).sum(axis=1)
             ini_traj["grad_traj"] = np.array(grad_traj).sum(axis=1)
+            initials["grad"] = np.array(initial_grad).sum(axis=1)
         elif not save_grad and save_gauss:
             gauss_traj = []
+            initial_gauss = []
             for i in range(n_conditions):
                 t = 0
-                while not self.above_Sigma(x):
-                    x, p, _, gauss = self.step(x, p)
-                    x_traj.append(x)
-                    p_traj.append(p)
+                while not self.above_Sigma(self.ini_x):
+                    self.ini_x, self.ini_p, _, gauss = self.step(self.ini_x, self.ini_p)
+                    x_traj.append(self.ini_x)
+                    p_traj.append(self.ini_p)
                     gauss_traj.append(gauss)
                     md_steps += 1
                     t += 1
-                initial_x.append(x)
-                initial_p.append(p)
-                while not self.in_R(x):
-                    x, p, _, gauss = self.step(x, p)
-                    x_traj.append(x)
-                    p_traj.append(p)
+                initial_x.append(self.ini_x)
+                initial_p.append(self.ini_p)
+                initial_gauss.append(gauss)
+                while not self.in_R(self.ini_x):
+                    self.ini_x, self.ini_p, _, gauss = self.step(self.ini_x, self.ini_p)
+                    x_traj.append(self.ini_x)
+                    p_traj.append(self.ini_p)
                     gauss_traj.append(gauss)
                     md_steps += 1
                     t += 1
-                    if self.in_P(x):
+                    if self.in_P(self.ini_x):
                         index = np.random.choice(len(x_traj))
-                        x = x_traj[index]
-                        p = p_traj[index]
+                        self.ini_x = x_traj[index]
+                        self.ini_p = p_traj[index]
                         t -= 10**6
                 if t > 0:
                     t_loop.append(t)
-            ini_traj["x_traj"] = np.array(x_traj).sum(axis=1)
-            ini_traj["p_traj"] = np.array(p_traj).sum(axis=1)
             ini_traj["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
+            initials["gauss"] = np.array(initial_gauss).sum(axis=1)
         else:
             grad_traj = []
             gauss_traj = []
+            initial_grad = []
+            initial_gauss = []
             for i in range(n_conditions):
                 t = 0
-                while not self.above_Sigma(x):
-                    x, p, grad, gauss = self.step(x, p)
-                    x_traj.append(x)
-                    p_traj.append(p)
+                while not self.above_Sigma(self.ini_x, self.ini_p):
+                    self.ini_x, self.ini_p, grad, gauss = self.step(self.ini_x, self.ini_p)
+                    x_traj.append(self.ini_x)
+                    p_traj.append(self.ini_p)
                     grad_traj.append(grad)
                     gauss_traj.append(gauss)
                     md_steps += 1
                     t += 1
-                initial_x.append(x)
-                while not self.in_R(x):
-                    x, p, grad, gauss = self.step(x, p)
-                    x_traj.append(x)
-                    p_traj.append(p)
+                initial_x.append(self.ini_x)
+                initial_p.append(self.ini_p)
+                initial_grad.append(grad)
+                initial_gauss.append(gauss)
+                while not self.in_R(self.ini_x):
+                    self.ini_x, self.ini_p, grad, gauss = self.step(self.ini_x, self.ini_p)
+                    x_traj.append(self.ini_x)
+                    p_traj.append(self.ini_p)
                     grad_traj.append(grad)
                     gauss_traj.append(gauss)
                     md_steps += 1
                     t += 1
-                    if self.in_P(x):
+                    if self.in_P(self.ini_x):
                         index = np.random.choice(len(x_traj))
-                        x = x_traj[index]
-                        p = p_traj[index]
+                        self.ini_x = x_traj[index]
+                        self.ini_p = p_traj[index]
                         t -= 10 ** 6
                 if t > 0:
                     t_loop.append(t)
-            ini_traj["x_traj"] = np.array(x_traj).sum(axis=1)
-            ini_traj["p_traj"] = np.array(p_traj).sum(axis=1)
             ini_traj["grad_traj"] = np.array(grad_traj).sum(axis=1)
             ini_traj["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
+            initials["grad"] = np.array(initial_grad).sum(axis=1)
+            initials["gauss"] = np.array(initial_gauss).sum(axis=1)
+        ini_traj["x_traj"] = np.array(x_traj).sum(axis=1)
+        ini_traj["p_traj"] = np.array(p_traj).sum(axis=1)
         initials["x"] = np.array(initial_x).sum(axis=1)
-        initials["x"] = np.array(initial_p).sum(axis=1)
+        initials["p"] = np.array(initial_p).sum(axis=1)
         return ini_traj, initials, np.array(t_loop), md_steps
 
     def ams_initialization(self, n_rep, initials, save_grad=False, save_gauss=False):
@@ -760,6 +786,8 @@ class AMSLangevin(Langevin):
                 p_traj = []
                 x = initials["x"][i: i+1]
                 p = initials["p"][i: i+1]
+                x_traj.append(x)
+                p_traj.append(p)
                 z_max = self.xi(x, p)
                 while not self.in_R(x) and not self.in_P(x):     # until they reach either R or P
                     x, p, _, _ = self.step(x, p)
@@ -785,6 +813,9 @@ class AMSLangevin(Langevin):
                 grad_traj = []
                 x = initials["x"][i: i + 1]
                 p = initials["p"][i: i + 1]
+                x_traj.append(x)
+                p_traj.append(p)
+                grad_traj.append(initials["grad"][i: i + 1])
                 z_max = self.xi(x, p)
                 while not self.in_R(x) and not self.in_P(x):  # until they reach either R or P
                     x, p, grad, _ = self.step(x, p)
@@ -812,6 +843,9 @@ class AMSLangevin(Langevin):
                 gauss_traj = []
                 x = initials["x"][i: i + 1]
                 p = initials["p"][i: i + 1]
+                x_traj.append(x)
+                p_traj.append(p)
+                gauss_traj.append(initials["gauss"][i: i + 1])
                 z_max = self.xi(x, p)
                 while not self.in_R(x) and not self.in_P(x):  # until they reach either R or P
                     x, p, _, gauss = self.step(x, p)
@@ -840,6 +874,10 @@ class AMSLangevin(Langevin):
                 gauss_traj = []
                 x = initials["x"][i: i + 1]
                 p = initials["p"][i: i + 1]
+                x_traj.append(x)
+                p_traj.append(p)
+                grad_traj.append(initials["grad"][i: i + 1])
+                gauss_traj.append(initials["gauss"][i: i + 1])
                 z_max = self.xi(x, p)
                 while not self.in_R(x) and not self.in_P(x):  # until they reach either R or P
                     x, p, grad, gauss = self.step(x, p)
