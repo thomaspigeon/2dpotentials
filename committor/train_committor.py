@@ -803,7 +803,7 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
         X_given_z = [[] for i in range(n_bins)]
         Esp_X_given_z = []
         f_dec_z = []
-        xi_values = self.committor_model.xi(self.dataset["boltz_points"])[:, 0]
+        xi_values = self.committor_model.xi_forward(self.dataset["boltz_points"])[:, 0]
         # equal-width bins
         z_bin = np.linspace(xi_values.min(), xi_values.max(), n_bins)
         # compute index of bin
@@ -843,7 +843,7 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
         X_given_z = [[] for i in range(n_bins)]
         Esp_X_given_z = []
         f_dec_z = []
-        xi_values = self.committor_model.xi(self.dataset["boltz_points"])[:, 0]
+        xi_values = self.committor_model.xi_forward(self.dataset["boltz_points"])[:, 0]
         # equal-width bins
         z_bin = np.linspace(xi_values.min(), xi_values.max(), n_bins)
         # compute index of bin
@@ -1262,7 +1262,7 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
         boltz_points = torch.tensor(self.dataset["boltz_points"].astype('float32'))
         boltz_points_decoded1 = self.committor_model.decoder1(self.committor_model.encoder(boltz_points))
         boltz_points_decoded2 = self.committor_model.decoder2(self.committor_model.encoder(boltz_points))
-        xi_values = self.committor_model.xi(self.dataset["boltz_points"])[:, 0]
+        xi_values = self.committor_model.xi_forward(self.dataset["boltz_points"])[:, 0]
         # equal-width bins
         z_bin = np.linspace(xi_values.min(), xi_values.max(), n_bins)
         # compute index of bin
@@ -1328,7 +1328,7 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
         boltz_points = torch.tensor(self.dataset["boltz_points"].astype('float32'))
         boltz_points_decoded1 = self.committor_model.decoder1(self.committor_model.encoder(boltz_points))
         boltz_points_decoded2 = self.committor_model.decoder2(self.committor_model.encoder(boltz_points))
-        xi_values = self.committor_model.xi(self.dataset["boltz_points"])[:, 0]
+        xi_values = self.committor_model.xi_forward(self.dataset["boltz_points"])[:, 0]
         # equal-width bins
         z_bin = np.linspace(xi_values.min(), xi_values.max(), n_bins)
         # compute index of bin
