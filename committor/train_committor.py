@@ -77,7 +77,7 @@ class TrainCommittorOverdamped:
             if "boltz_points" in dataset.keys():
                 self.dataset["boltz_points"] = self.ZCAMatrix.dot(dataset["boltz_points"].T).T
             penalization_points = self.ZCAMatrix.dot(penalization_points.T).T
-            self.penalization_point = torch.tensor(penalization_points.astype('float32'))
+            self.penalization_points = torch.tensor(penalization_points.astype('float32'))
             if "react_points" in dataset.keys():
                 self.dataset["react_points"] = self.ZCAMatrix.dot(dataset["react_points"].T).T
         # attributes that have to be set through later defined methods
@@ -91,7 +91,6 @@ class TrainCommittorOverdamped:
         self.mse_boltz_weight = None
         self.mse_react_weight = None
         self.squared_grad_boltz_weight = None
-        self.squared_grad_react_weight = None
         self.l1_pen_weight = None
         self.l2_pen_weight = None
         self.pen_points_weight = None
@@ -103,8 +102,6 @@ class TrainCommittorOverdamped:
         :param loss_params:     dict, containing: loss_params["ito_loss_weight"], float >= 0, prefactor of the ito loss
                                 term loss_params["squared_grad_boltz_weight"], float >= 0, prefactor of the
                                 squared gradient the encoder on the Bolzmann-Gibbs distribution,
-                                loss_params["squared_grad_react_weight"], float >= 0, prefactor of the
-                                squared gradient the encoder on the reactive trajectory distribution,
                                 loss_params["mse_boltz_weight"] float >= 0, prefactor of the MSE term
                                 of the loss on the Bolzmann gibbs distribution, loss_params["mse_react_weight"],
                                 float >= 0, prefactor of the MSE term of the loss on the reactive trajectories'
@@ -131,14 +128,6 @@ class TrainCommittorOverdamped:
             raise ValueError("""loss_params["squared_grad_boltz_weight"] must be a float >= 0.""")
         else:
             self.squared_grad_boltz_weight = loss_params["squared_grad_boltz_weight"]
-
-        if "squared_grad_react_weight" not in loss_params.keys():
-            self.squared_grad_react_weight = 0
-            print("""squared_grad_react_weight value not provided, set to default value of: """, 0.)
-        elif type(loss_params["squared_grad_react_weight"]) != float or loss_params["squared_grad_react_weight"] < 0.:
-            raise ValueError("""loss_params["squared_grad_react_weight"] must be a float >= 0.""")
-        else:
-            self.squared_grad_react_weight = loss_params["squared_grad_react_weight"]
 
         if "mse_boltz_weight" not in loss_params.keys():
             self.mse_boltz_weight = 0.
@@ -216,11 +205,11 @@ class TrainCommittorOverdamped:
     def set_penalization_points(self, penalization_points):
         """Method to reset penalization points
 
-        :param penalization_point:  np.array, ndim==2, shape=[any, 3], penalization_point[:, :2] are the points on which
+        :param penalization_points: np.array, ndim==2, shape=[any, 3], penalization_point[:, :2] are the points on which
                                     the encoder is penalized if its values on these points differ from
                                     penalization_point[:, 2]
         """
-        self.penalization_point = torch.tensor(penalization_points.astype('float32'))
+        self.penalization_points = torch.tensor(penalization_points.astype('float32'))
 
     def train_test_split(self, train_size=None, test_size=None, seed=None):
         """Method to separate the dataset into training and test dataset.
@@ -390,29 +379,6 @@ class TrainCommittorOverdamped:
             raise ValueError("""Cannot compute this term if there are no points distributed according to the Bolzmann-
                                 Gibbs measure in the dataset""")
 
-    def squared_grad_encoder_penalization_react(self, inp, enc):
-        """Squared gradient of the encoder evaluated on the points distributed according to Boltzmann-Gibbs measure.
-
-        :param inp:         torch.tensor, ndim==2, a chunk of self.training_data or self.test_data
-        :param enc:         torch.tensor, ndim==2, shape==[any, 1], output of the encoder corresponding to part of the
-                            inp distributed according to reactive trajectories measure
-        :return grad_enc:   torch float, squared gradient of the encoder renormalized by the encoder
-                            ie: (q - q²)^{-1} * | \nabla q |²
-        """
-        if "react_points" in self.dataset.keys() and "boltz_points" in self.dataset.keys():
-            return ((inp[:, 11]/(enc * (1 - enc))) * ((torch.autograd.grad(outputs=enc.sum(),
-                                                       inputs=inp[:, 9:11],
-                                                       retain_graph=True,
-                                                       create_graph=True)[0][:, :2]) ** 2).sum(dim=1)).mean()
-        elif "react_points" in self.dataset.keys() and "boltz_points" not in self.dataset.keys():
-            return ((inp[:, 8]/(enc * (1 - enc))) * ((torch.autograd.grad(outputs=enc.sum(),
-                                                      inputs=inp[:, 6:8],
-                                                      retain_graph=True,
-                                                      create_graph=True)[0][:, :2]) ** 2).sum(dim=1)).mean()
-        else:
-            raise ValueError("""Cannot compute this term if there are no points distributed according to the reactive
-                                trajectory measure in the dataset""")
-
     def penalization_on_points(self):
         """
 
@@ -566,14 +532,14 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
             self.set_optimizer('Adam', 0.001)
         # prepare the various loss list to store
         loss_dict = {"train_loss": [], "test_loss": [], "train_ito_loss": [], "test_ito_loss": []}
-        if "react_points" in self.dataset.keys():
-            loss_dict["train_mse_react"] = []
-            loss_dict["test_mse_react"] = []
-            loss_dict["train_squared_grad_enc_blotz"] = []
-            loss_dict["test_squared_grad_enc_blotz"] = []
         if "boltz_points" in self.dataset.keys():
             loss_dict["train_mse_boltz"] = []
             loss_dict["test_mse_boltz"] = []
+            loss_dict["train_squared_grad_enc_blotz"] = []
+            loss_dict["test_squared_grad_enc_blotz"] = []
+        if "react_points" in self.dataset.keys():
+            loss_dict["train_mse_react"] = []
+            loss_dict["test_mse_react"] = []
             loss_dict["train_squared_grad_enc_react"] = []
             loss_dict["test_squared_grad_enc_react"] = []
         train_loader = torch.utils.data.DataLoader(dataset=self.train_data, batch_size=batch_size, shuffle=True)
@@ -588,7 +554,6 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
                 loss_dict["train_squared_grad_enc_blotz"].append([])
             if "react_points" in self.dataset.keys():
                 loss_dict["train_mse_react"].append([])
-                loss_dict["train_squared_grad_enc_react"].append([])
             # train mode
             self.committor_model.train()
             for iteration, X in enumerate(train_loader):
@@ -616,15 +581,12 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
                     enc_reac = self.committor_model.encoder(X[:, 9:11])
                     out_reac = self.committor_model.decoder(enc_reac)
                     mse_react = self.mse_loss_react(X, out_reac)
-                    squared_grad_enc_react = self.squared_grad_encoder_penalization_react(X, enc_reac)
                     loss += self.mse_boltz_weight * mse_blotz + \
                             self.squared_grad_boltz_weight * squared_grad_enc_boltz + \
-                            self.mse_react_weight * mse_react + \
-                            self.squared_grad_react_weight * squared_grad_enc_react
+                            self.mse_react_weight * mse_react
                     loss_dict["train_mse_react"][epoch].append(mse_blotz.detach().numpy())
                     loss_dict["train_squared_grad_enc_blotz"][epoch].append(squared_grad_enc_boltz.detach().numpy())
                     loss_dict["train_mse_react"][epoch].append(mse_react.detach().numpy())
-                    loss_dict["train_squared_grad_enc_react"][epoch].append(squared_grad_enc_react.detach().numpy())
                 elif "boltz_points" in self.dataset.keys() and "react_points" not in self.dataset.keys():
                     enc = self.committor_model.encoder(X[:, 6:8])
                     out = self.committor_model.decoder(enc)
@@ -638,11 +600,8 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
                     enc_reac = self.committor_model.encoder(X[:, 6:8])
                     out_reac = self.committor_model.decoder(enc_reac)
                     mse_react = self.mse_loss_react(X, out_reac)
-                    squared_grad_enc_react = self.squared_grad_encoder_penalization_react(X, enc_reac)
-                    loss += self.mse_react_weight * mse_react + \
-                            self.squared_grad_react_weight * squared_grad_enc_react
+                    loss += self.mse_react_weight * mse_react
                     loss_dict["train_mse_react"][epoch].append(mse_react.detach().numpy())
-                    loss_dict["train_squared_grad_enc_react"][epoch].append(squared_grad_enc_react.detach().numpy())
                 loss_dict["train_loss"][epoch].append(loss.detach().numpy())
                 loss.backward()
                 self.optimizer.step()
@@ -652,17 +611,14 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
             loss_dict["test_loss"].append([])
             loss_dict["test_ito_loss"].append([])
             if "boltz_points" in self.dataset.keys():
-                loss_dict["train_mse_react"][epoch] = np.mean(loss_dict["train_mse_react"][epoch])
+                loss_dict["train_mse_boltz"][epoch] = np.mean(loss_dict["train_mse_boltz"][epoch])
                 loss_dict["train_squared_grad_enc_blotz"][epoch] = np.mean(
                     loss_dict["train_squared_grad_enc_blotz"][epoch])
                 loss_dict["test_mse_boltz"].append([])
                 loss_dict["test_squared_grad_enc_blotz"].append([])
             if "react_points" in self.dataset.keys():
                 loss_dict["train_mse_react"][epoch] = np.mean(loss_dict["train_mse_react"][epoch])
-                loss_dict["train_squared_grad_enc_react"][epoch] = np.mean(
-                    loss_dict["train_squared_grad_enc_react"][epoch])
                 loss_dict["test_mse_react"].append([])
-                loss_dict["test_squared_grad_enc_react"].append([])
             # test mode
             self.committor_model.eval()
             for iteration, X in enumerate(test_loader):
@@ -688,15 +644,12 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
                     enc_reac = self.committor_model.encoder(X[:, 9:11])
                     out_reac = self.committor_model.decoder(enc_reac)
                     mse_react = self.mse_loss_react(X, out_reac)
-                    squared_grad_enc_react = self.squared_grad_encoder_penalization_react(X, enc_reac)
                     loss += self.mse_boltz_weight * mse_blotz + \
                             self.squared_grad_boltz_weight * squared_grad_enc_boltz + \
-                            self.mse_react_weight * mse_react + \
-                            self.squared_grad_react_weight * squared_grad_enc_react
+                            self.mse_react_weight * mse_react
                     loss_dict["test_mse_boltz"][epoch].append(mse_blotz.detach().numpy())
                     loss_dict["test_squared_grad_enc_blotz"][epoch].append(squared_grad_enc_boltz.detach().numpy())
                     loss_dict["test_mse_react"][epoch].append(mse_react.detach().numpy())
-                    loss_dict["test_squared_grad_enc_react"][epoch].append(squared_grad_enc_react.detach().numpy())
                 elif "boltz_points" in self.dataset.keys() and "react_points" not in self.dataset.keys():
                     enc = self.committor_model.encoder(X[:, 6:8])
                     out = self.committor_model.decoder(enc)
@@ -710,11 +663,8 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
                     enc_reac = self.committor_model.encoder(X[:, 6:8])
                     out_reac = self.committor_model.decoder(enc_reac)
                     mse_react = self.mse_loss_react(X, out_reac)
-                    squared_grad_enc_react = self.squared_grad_encoder_penalization_react(X, enc_reac)
-                    loss += self.mse_react_weight * mse_react + \
-                            self.squared_grad_react_weight * squared_grad_enc_react
+                    loss += self.mse_react_weight * mse_react
                     loss_dict["test_mse_react"][epoch].append(mse_react.detach().numpy())
-                    loss_dict["test_squared_grad_enc_react"][epoch].append(squared_grad_enc_react.detach().numpy())
                 loss_dict["test_loss"][epoch].append(loss.detach().numpy())
                 loss.backward()
                 self.optimizer.step()
@@ -726,8 +676,6 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
                     loss_dict["test_squared_grad_enc_blotz"][epoch])
             if "react_points" in self.dataset.keys():
                 loss_dict["test_mse_react"][epoch] = np.mean(loss_dict["test_mse_react"][epoch])
-                loss_dict["test_squared_grad_enc_react"][epoch] = np.mean(
-                    loss_dict["test_squared_grad_enc_react"][epoch])
 
             # Early stopping
             if loss_dict["test_loss"][epoch] == np.min(loss_dict["test_loss"]):
@@ -763,15 +711,12 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
             enc_reac = self.committor_model.encoder(X[:, 9:11])
             out_reac = self.committor_model.decoder(enc_reac)
             mse_react = self.mse_loss_react(X, out_reac)
-            squared_grad_enc_react = self.squared_grad_encoder_penalization_react(X, enc_reac)
             loss += self.mse_boltz_weight * mse_blotz + \
                     self.squared_grad_boltz_weight * squared_grad_enc_boltz + \
-                    self.mse_react_weight * mse_react + \
-                    self.squared_grad_react_weight * squared_grad_enc_react
+                    self.mse_react_weight * mse_react
             print("""Test MSE Boltzmann: """, mse_blotz)
             print("""Test squarred grad encoder boltzmann: """, squared_grad_enc_boltz)
             print("""Test MSE reactive: """, mse_react)
-            print("""Test squarred grad encoder boltzmann: """, squared_grad_enc_react)
         elif "boltz_points" in self.dataset.keys() and "react_points" not in self.dataset.keys():
             enc = self.committor_model.encoder(X[:, 6:8])
             out = self.committor_model.decoder(enc)
@@ -785,11 +730,8 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
             enc_reac = self.committor_model.encoder(X[:, 6:8])
             out_reac = self.committor_model.decoder(enc_reac)
             mse_react = self.mse_loss_react(X, out_reac)
-            squared_grad_enc_react = self.squared_grad_encoder_penalization_react(X, enc_reac)
-            loss += self.mse_react_weight * mse_react + \
-                    self.squared_grad_react_weight * squared_grad_enc_react
+            loss += self.mse_react_weight * mse_react
             print("""Test MSE reative: """, mse_react)
-            print("""Test squarred grad encoder boltzmann: """, squared_grad_enc_react)
         print("""Test loss: """, loss)
 
     def plot_conditional_averages(self, ax, n_bins, set_lim=False):
@@ -1010,16 +952,14 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
             self.set_optimizer('Adam', 0.001)
         # prepare the various loss list to store
         loss_dict = {"train_loss": [], "test_loss": [], "train_ito_loss": [], "test_ito_loss": []}
-        if "react_points" in self.dataset.keys():
-            loss_dict["train_mse_react"] = []
-            loss_dict["test_mse_react"] = []
-            loss_dict["train_squared_grad_enc_blotz"] = []
-            loss_dict["test_squared_grad_enc_blotz"] = []
         if "boltz_points" in self.dataset.keys():
             loss_dict["train_mse_boltz"] = []
             loss_dict["test_mse_boltz"] = []
-            loss_dict["train_squared_grad_enc_react"] = []
-            loss_dict["test_squared_grad_enc_react"] = []
+            loss_dict["train_squared_grad_enc_blotz"] = []
+            loss_dict["test_squared_grad_enc_blotz"] = []
+        if "react_points" in self.dataset.keys():
+            loss_dict["train_mse_react"] = []
+            loss_dict["test_mse_react"] = []
         train_loader = torch.utils.data.DataLoader(dataset=self.train_data, batch_size=batch_size, shuffle=True)
         test_loader = torch.utils.data.DataLoader(dataset=self.validation_data, batch_size=batch_size, shuffle=True)
         epoch = 0
@@ -1032,7 +972,6 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
                 loss_dict["train_squared_grad_enc_blotz"].append([])
             if "react_points" in self.dataset.keys():
                 loss_dict["train_mse_react"].append([])
-                loss_dict["train_squared_grad_enc_react"].append([])
             # train mode
             self.committor_model.train()
             for iteration, X in enumerate(train_loader):
@@ -1061,15 +1000,12 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
                     dec_reac1 = self.committor_model.decoder1(enc_reac)
                     dec_reac2 = self.committor_model.decoder2(enc_reac)
                     mse_react = self.mse_loss_react(X, dec_reac1, dec_reac2)
-                    squared_grad_enc_react = self.squared_grad_encoder_penalization_react(X, enc_reac)
                     loss += self.mse_boltz_weight * mse_blotz + \
                             self.squared_grad_boltz_weight * squared_grad_enc_boltz + \
-                            self.mse_react_weight * mse_react + \
-                            self.squared_grad_react_weight * squared_grad_enc_react
+                            self.mse_react_weight * mse_react
                     loss_dict["train_mse_react"][epoch].append(mse_blotz.detach().numpy())
                     loss_dict["train_squared_grad_enc_blotz"][epoch].append(squared_grad_enc_boltz.detach().numpy())
                     loss_dict["train_mse_react"][epoch].append(mse_react.detach().numpy())
-                    loss_dict["train_squared_grad_enc_react"][epoch].append(squared_grad_enc_react.detach().numpy())
                 elif "boltz_points" in self.dataset.keys() and "react_points" not in self.dataset.keys():
                     enc = self.committor_model.encoder(X[:, 6:8])
                     dec1 = self.committor_model.decoder1(enc)
@@ -1085,11 +1021,8 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
                     dec_reac1 = self.committor_model.decoder1(enc_reac)
                     dec_reac2 = self.committor_model.decoder2(enc_reac)
                     mse_react = self.mse_loss_react(X, dec_reac1, dec_reac2)
-                    squared_grad_enc_react = self.squared_grad_encoder_penalization_react(X, enc_reac)
-                    loss += self.mse_react_weight * mse_react + \
-                            self.squared_grad_react_weight * squared_grad_enc_react
+                    loss += self.mse_react_weight * mse_react
                     loss_dict["train_mse_react"][epoch].append(mse_react.detach().numpy())
-                    loss_dict["train_squared_grad_enc_react"][epoch].append(squared_grad_enc_react.detach().numpy())
                 loss_dict["train_loss"][epoch].append(loss.detach().numpy())
                 loss.backward()
                 self.optimizer.step()
@@ -1099,17 +1032,14 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
             loss_dict["test_loss"].append([])
             loss_dict["test_ito_loss"].append([])
             if "boltz_points" in self.dataset.keys():
-                loss_dict["train_mse_react"][epoch] = np.mean(loss_dict["train_mse_react"][epoch])
+                loss_dict["train_mse_boltz"][epoch] = np.mean(loss_dict["train_mse_boltz"][epoch])
                 loss_dict["train_squared_grad_enc_blotz"][epoch] = np.mean(
                     loss_dict["train_squared_grad_enc_blotz"][epoch])
                 loss_dict["test_mse_boltz"].append([])
                 loss_dict["test_squared_grad_enc_blotz"].append([])
             if "react_points" in self.dataset.keys():
                 loss_dict["train_mse_react"][epoch] = np.mean(loss_dict["train_mse_react"][epoch])
-                loss_dict["train_squared_grad_enc_react"][epoch] = np.mean(
-                    loss_dict["train_squared_grad_enc_react"][epoch])
                 loss_dict["test_mse_react"].append([])
-                loss_dict["test_squared_grad_enc_react"].append([])
             # test mode
             self.committor_model.eval()
             for iteration, X in enumerate(test_loader):
@@ -1136,15 +1066,12 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
                     dec_reac1 = self.committor_model.decoder1(enc_reac)
                     dec_reac2 = self.committor_model.decoder2(enc_reac)
                     mse_react = self.mse_loss_react(X, dec_reac1, dec_reac2)
-                    squared_grad_enc_react = self.squared_grad_encoder_penalization_react(X, enc_reac)
                     loss += self.mse_boltz_weight * mse_blotz + \
                             self.squared_grad_boltz_weight * squared_grad_enc_boltz + \
-                            self.mse_react_weight * mse_react + \
-                            self.squared_grad_react_weight * squared_grad_enc_react
+                            self.mse_react_weight * mse_react
                     loss_dict["test_mse_boltz"][epoch].append(mse_blotz.detach().numpy())
                     loss_dict["test_squared_grad_enc_blotz"][epoch].append(squared_grad_enc_boltz.detach().numpy())
                     loss_dict["test_mse_react"][epoch].append(mse_react.detach().numpy())
-                    loss_dict["test_squared_grad_enc_react"][epoch].append(squared_grad_enc_react.detach().numpy())
                 elif "boltz_points" in self.dataset.keys() and "react_points" not in self.dataset.keys():
                     enc = self.committor_model.encoder(X[:, 6:8])
                     dec1 = self.committor_model.decoder1(enc)
@@ -1160,11 +1087,8 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
                     dec_reac1 = self.committor_model.decoder1(enc_reac)
                     dec_reac2 = self.committor_model.decoder2(enc_reac)
                     mse_react = self.mse_loss_react(X, dec_reac1, dec_reac2)
-                    squared_grad_enc_react = self.squared_grad_encoder_penalization_react(X, enc_reac)
-                    loss += self.mse_react_weight * mse_react + \
-                            self.squared_grad_react_weight * squared_grad_enc_react
+                    loss += self.mse_react_weight * mse_react
                     loss_dict["test_mse_react"][epoch].append(mse_react.detach().numpy())
-                    loss_dict["test_squared_grad_enc_react"][epoch].append(squared_grad_enc_react.detach().numpy())
                 loss_dict["test_loss"][epoch].append(loss.detach().numpy())
                 loss.backward()
                 self.optimizer.step()
@@ -1176,8 +1100,6 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
                     loss_dict["test_squared_grad_enc_blotz"][epoch])
             if "react_points" in self.dataset.keys():
                 loss_dict["test_mse_react"][epoch] = np.mean(loss_dict["test_mse_react"][epoch])
-                loss_dict["test_squared_grad_enc_react"][epoch] = np.mean(
-                    loss_dict["test_squared_grad_enc_react"][epoch])
 
             # Early stopping
             if loss_dict["test_loss"][epoch] == np.min(loss_dict["test_loss"]):
@@ -1214,15 +1136,12 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
             dec_reac1 = self.committor_model.decoder1(enc_reac)
             dec_reac2 = self.committor_model.decoder2(enc_reac)
             mse_react = self.mse_loss_react(X, dec_reac1, dec_reac2)
-            squared_grad_enc_react = self.squared_grad_encoder_penalization_react(X, enc_reac)
             loss += self.mse_boltz_weight * mse_blotz + \
                     self.squared_grad_boltz_weight * squared_grad_enc_boltz + \
-                    self.mse_react_weight * mse_react + \
-                    self.squared_grad_react_weight * squared_grad_enc_react
+                    self.mse_react_weight * mse_react
             print("""Test MSE Boltzmann: """, mse_blotz)
             print("""Test squarred grad encoder boltzmann: """, squared_grad_enc_boltz)
             print("""Test MSE reactive: """, mse_react)
-            print("""Test squarred grad encoder boltzmann: """, squared_grad_enc_react)
         elif "boltz_points" in self.dataset.keys() and "react_points" not in self.dataset.keys():
             enc = self.committor_model.encoder(X[:, 6:8])
             dec1 = self.committor_model.decoder1(enc)
@@ -1238,11 +1157,8 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
             dec_reac1 = self.committor_model.decoder1(enc_reac)
             dec_reac2 = self.committor_model.decoder2(enc_reac)
             mse_react = self.mse_loss_react(X, dec_reac1, dec_reac2)
-            squared_grad_enc_react = self.squared_grad_encoder_penalization_react(X, enc_reac)
-            loss += self.mse_react_weight * mse_react + \
-                    self.squared_grad_react_weight * squared_grad_enc_react
+            loss += self.mse_react_weight * mse_react
             print("""Test MSE reative: """, mse_react)
-            print("""Test squarred grad encoder boltzmann: """, squared_grad_enc_react)
         print("""Test loss: """, loss)
 
     def plot_conditional_averages(self, ax, n_bins, set_lim=False):
