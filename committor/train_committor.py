@@ -400,7 +400,7 @@ class TrainCommittorOverdamped:
             x = self.ZCAMatrix.dot(self.pot.x2d.T).T
         else:
             x = self.pot.x2d
-        committor_on_grid = self.committor_model.xi(x).reshape(self.pot.n_bins_x, self.pot.n_bins_y)
+        committor_on_grid = self.committor_model.xi_forward(x).reshape(self.pot.n_bins_x, self.pot.n_bins_y)
         if set_lim:
             ax.set_ylim(self.pot.y_domain[0], self.pot.y_domain[1])
             ax.set_xlim(self.pot.x_domain[0], self.pot.x_domain[1])
