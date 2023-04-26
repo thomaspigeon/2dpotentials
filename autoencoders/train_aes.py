@@ -692,13 +692,13 @@ class TainAEOneDecoder(TrainAE):
         dist_fec_exp = (bin_population / np.sum(bin_population)) * np.sum(
             (np.array(Esp_X_given_z) - np.array(f_dec_z)) ** 2, axis=1)
         plt.figure()
-        plt.plot(z_values, cos_angles,
-                 label='cosine of angle between the gradient of the encoder at the cdt. avg. and the derivative of the decoder')
+        plt.plot(z_values, cos_angles)
+        plt.title('cosine of angle between the gradient of the encoder \n at the cdt. avg. and the derivative of the decoder')
         plt.legend()
         plt.show()
         plt.figure()
-        plt.plot(z_values, dist_fec_exp,
-                 label='distance between the decoder and the conditional average')
+        plt.plot(z_values, dist_fec_exp)
+        plt.title('distance between the decoder and the conditional average')
         plt.legend()
         plt.show()
 
