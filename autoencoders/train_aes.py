@@ -694,12 +694,10 @@ class TainAEOneDecoder(TrainAE):
         plt.figure()
         plt.plot(z_values, cos_angles)
         plt.title('cosine of angle between the gradient of the encoder \n at the cdt. avg. and the derivative of the decoder')
-        plt.legend()
         plt.show()
         plt.figure()
         plt.plot(z_values, dist_fec_exp)
         plt.title('distance between the decoder and the conditional average')
-        plt.legend()
         plt.show()
 
 
