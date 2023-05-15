@@ -555,7 +555,7 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
             if "react_points" in self.dataset.keys():
                 loss_dict["train_mse_react"].append([])
             # train mode
-            self.committor_model.train()
+            #self.committor_model.train()
             for iteration, X in enumerate(train_loader):
                 # Set gradient calculation capabilities
                 X.requires_grad_()
@@ -620,7 +620,7 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
                 loss_dict["train_mse_react"][epoch] = np.mean(loss_dict["train_mse_react"][epoch])
                 loss_dict["test_mse_react"].append([])
             # test mode
-            self.committor_model.eval()
+            #self.committor_model.eval()
             for iteration, X in enumerate(test_loader):
                 # Set gradient calculation capabilities
                 X.requires_grad_()
