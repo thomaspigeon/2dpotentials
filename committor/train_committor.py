@@ -412,15 +412,15 @@ class TrainCommittorOverdamped:
         """
         grad_xi_dot_gauss = np.sqrt(2 * self.dataset['dt'] / self.dataset['beta']) * torch.sum(
             torch.autograd.grad(outputs=self.committor_model.committor(inp[:, :2]).sum(),
-                                inputs=inp[:, :2],
+                                inputs=inp,
                                 retain_graph=True,
                                 create_graph=True)[0][:, :2] * inp[:, 2:4], dim=1)
         for i in range(1, inp.shape[1]//4):
             grad_xi_dot_gauss += np.sqrt(2 * self.dataset['dt'] / self.dataset['beta']) * torch.sum(
                 torch.autograd.grad(outputs=self.committor_model.committor(inp[:, 4*i:4*i+2]).sum(),
-                                    inputs=inp[:, 4*i:4*i+2],
+                                    inputs=inp,
                                     retain_graph=True,
-                                    create_graph=True)[0][:, :2] * inp[:, 4*i+2:4*i+4], dim=1)
+                                    create_graph=True)[0][:, 4*i:4*i+2] * inp[:, 4*i+2:4*i+4], dim=1)
         return torch.mean(torch.sum((self.committor_model.committor(inp[:, :2]) - self.committor_model.committor(
             inp[:, -2:]) - grad_xi_dot_gauss) ** 2, dim=1))
 
