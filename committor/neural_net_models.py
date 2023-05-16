@@ -88,7 +88,7 @@ class CommittorOneDecoder(torch.nn.Module):
             x = torch.from_numpy(x).float()
         x.requires_grad_()
         enc = self.encoder(x)
-        return ((torch.autograd.grad(outputs=enc.sum(), inputs=x)[0][:, :2]) ** 2).mean()
+        return torch.autograd.grad(outputs=enc.sum(), inputs=x)[0][:, :2]
 
 class CommittorTwoDecoder(torch.nn.Module):
     def __init__(self, committor_dims, decoder_dims, dropout, pot):
