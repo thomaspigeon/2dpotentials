@@ -421,8 +421,8 @@ class TrainCommittorOverdamped:
                                     inputs=inp,
                                     retain_graph=True,
                                     create_graph=True)[0][:, 4*i:4*i+2] * inp[:, 4*i+2:4*i+4], dim=1)
-        return torch.mean(torch.sum((self.committor_model.committor(inp[:, :2]) - self.committor_model.committor(
-            inp[:, -2:]) - grad_xi_dot_gauss) ** 2, dim=1))
+        return torch.mean(torch.sum((self.committor_model.committor(inp[:, -2:]) - self.committor_model.committor(
+            inp[:, :2]) - grad_xi_dot_gauss) ** 2, dim=1))
 
 
 class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
