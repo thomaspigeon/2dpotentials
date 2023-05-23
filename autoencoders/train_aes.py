@@ -78,6 +78,7 @@ class TrainAE:
         self.l1_pen_weight = None
         self.l2_pen_weight = None
         self.pen_points_weight = None
+        self.var_enc_weight = None
         self.var_dist_dec_weight = None
         self.n_bins_var_dist_dec = None
         self.n_wait = None
@@ -149,13 +150,21 @@ class TrainAE:
         else:
             self.pen_points_weight = loss_params["pen_points_weight"]
 
+        if "var_enc_weight" not in loss_params.keys():
+            self.var_enc_weight = 0.
+            print("""var_enc_weight value not provided, set to default value of: """, self.var_enc_weight)
+        elif type(loss_params["var_enc_weight"]) != float or loss_params["var_enc_weight"] < 0.:
+            raise ValueError("""loss_params["var_enc_weight"] must be set as a float >= 0.""")
+        else:
+            self.var_enc_weight = loss_params["var_enc_weight"]
+
         if "var_dist_dec_weight" not in loss_params.keys():
-            self.var_dist_dec_weight = 0
+            self.var_dist_dec_weight = 0.
             print("""var_dist_dec_weight value not provided, set to default value of: """, self.var_dist_dec_weight)
         elif type(loss_params["var_dist_dec_weight"]) != float or loss_params["var_dist_dec_weight"] < 0.:
             raise ValueError("""loss_params["var_dist_dec_weight"] must be a float >= 0.""")
         else:
-            self.l2_pen_weight = loss_params["var_dist_dec_weight"]
+            self.var_dist_dec_weight = loss_params["var_dist_dec_weight"]
 
         if "n_bins_var_dist_dec" not in loss_params.keys():
             self.n_bins_var_dist_dec = 20
@@ -315,8 +324,8 @@ class TrainAE:
         """Squared gradient of the encoder evaluated on the points distributed according to Boltzmann-Gibbs measure.
 
         :param inp:         torch.tensor, ndim==2, shape==[any, 3] or shape==[any, 6], inp[:, :2] is the input of the
-                            auto-encoder distributed according to Bolzmann-Gibbs measure and inp[:, 3] are the
-                            corresponding weights, inp[:, 3:] are not used
+                            auto-encoder distributed according to Bolzmann-Gibbs measure and inp[:, 2] are the
+                            corresponding weights, inp[:, 2:] are not used
         :param enc:         torch.tensor, ndim==2, shape==[any, 1], output of the encoder corresponding to the described
                             inp
         :return grad_enc:   torch float, squared gradient of the encoder
@@ -343,6 +352,9 @@ class TrainAE:
         :return var:    torch float, the variance or the distance between the successive decoded points.
         """
         return torch.var(torch.sqrt(torch.sum((dec[1:] - dec[:-1]) ** 2, dim=1)))
+
+    def var_encoder(self):
+        return (torch.var(self.ae.encoder(self.train_data[:, :2])) - 1)**2
 
     def plot_encoder_iso_levels(self, ax, n_lines, set_lim=False):
         """Plot the iso-lines of a given function to the given ax
@@ -492,8 +504,9 @@ class TainAEOneDecoder(TrainAE):
                 squared_grad_enc = self.squared_grad_encoder_penalization(X, enc)
                 l1_pen = self.l1_penalization(self.ae)
                 l2_pen = self.l2_penalization(self.ae)
+                var_enc = self.var_encoder()
                 loss = self.mse_boltz_weight * mse_blotz + \
-                       self.squared_grad_boltz_weight * squared_grad_enc + \
+                       self.var_enc_weight * var_enc + \
                        self.l1_pen_weight * l1_pen + \
                        self.l2_pen_weight * l2_pen + \
                        self.pen_points_weight * self.penalization_on_points()
@@ -540,8 +553,9 @@ class TainAEOneDecoder(TrainAE):
                 squared_grad_enc = self.squared_grad_encoder_penalization(X, enc)
                 l1_pen = self.l1_penalization(self.ae)
                 l2_pen = self.l2_penalization(self.ae)
+                var_enc = self.var_encoder()
                 loss = self.mse_boltz_weight * mse_blotz + \
-                       self.squared_grad_boltz_weight * squared_grad_enc + \
+                       self.var_enc_weight * var_enc + \
                        self.l1_pen_weight * l1_pen + \
                        self.l2_pen_weight * l2_pen + \
                        self.pen_points_weight * self.penalization_on_points()
@@ -589,8 +603,9 @@ class TainAEOneDecoder(TrainAE):
         squared_grad_enc = self.squared_grad_encoder_penalization(X, enc)
         l1_pen = self.l1_penalization(self.ae)
         l2_pen = self.l2_penalization(self.ae)
+        var_enc = self.var_encoder()
         loss = self.mse_boltz_weight * mse_blotz + \
-               self.squared_grad_boltz_weight * squared_grad_enc + \
+               self.var_enc_weight * var_enc + \
                self.l1_pen_weight * l1_pen + \
                self.l2_pen_weight * l2_pen + \
                self.pen_points_weight * self.penalization_on_points()
@@ -839,7 +854,9 @@ class TainAETwoDecoder(TrainAE):
                 squared_grad_enc = self.squared_grad_encoder_penalization(X, enc)
                 l1_pen = self.l1_penalization(self.ae)
                 l2_pen = self.l2_penalization(self.ae)
+                var_enc = self.var_encoder()
                 loss = self.mse_boltz_weight * mse_blotz + \
+                       self.var_enc_weight * var_enc + \
                        self.squared_grad_boltz_weight * squared_grad_enc + \
                        self.l1_pen_weight * l1_pen + \
                        self.l2_pen_weight * l2_pen + \
@@ -891,7 +908,9 @@ class TainAETwoDecoder(TrainAE):
                 squared_grad_enc = self.squared_grad_encoder_penalization(X, enc)
                 l1_pen = self.l1_penalization(self.ae)
                 l2_pen = self.l2_penalization(self.ae)
+                var_enc = self.var_encoder()
                 loss = self.mse_boltz_weight * mse_blotz + \
+                       self.var_enc_weight * var_enc + \
                        self.squared_grad_boltz_weight * squared_grad_enc + \
                        self.l1_pen_weight * l1_pen + \
                        self.l2_pen_weight * l2_pen + \
@@ -944,7 +963,9 @@ class TainAETwoDecoder(TrainAE):
         squared_grad_enc = self.squared_grad_encoder_penalization(X, enc)
         l1_pen = self.l1_penalization(self.ae)
         l2_pen = self.l2_penalization(self.ae)
+        var_enc = self.var_encoder()
         loss = self.mse_boltz_weight * mse_blotz + \
+               self.var_enc_weight * var_enc + \
                self.squared_grad_boltz_weight * squared_grad_enc + \
                self.l1_pen_weight * l1_pen + \
                self.l2_pen_weight * l2_pen + \
@@ -994,14 +1015,14 @@ class TainAETwoDecoder(TrainAE):
         inds = np.digitize(xi_values, z_bin)
         # distribute train data to each bin
         x1 = torch.sum((boltz_points - boltz_points_decoded1) ** 2, dim=1).detach().numpy() < torch.sum(
-            (boltz_points - boltz_points_decoded1) ** 2,
-            dim=1).detach().numpy()
-        x2 = torch.sum((boltz_points - boltz_points_decoded2) ** 2, dim=1).detach().numpy() < torch.sum(
             (boltz_points - boltz_points_decoded2) ** 2,
             dim=1).detach().numpy()
+        x2 = torch.sum((boltz_points - boltz_points_decoded2) ** 2, dim=1).detach().numpy() < torch.sum(
+            (boltz_points - boltz_points_decoded1) ** 2,
+            dim=1).detach().numpy()
         for bin_idx in range(n_bins):
-            X_given_z1[bin_idx] = boltz_points[x1 * (inds == bin_idx + 1), :2]
-            X_given_z2[bin_idx] = boltz_points[x2 * (inds == bin_idx + 1), :2]
+            X_given_z1[bin_idx] = self.dataset["boltz_points"][x1 * (inds == bin_idx + 1), :2]
+            X_given_z2[bin_idx] = self.dataset["boltz_points"][x2 * (inds == bin_idx + 1), :2]
             if len(X_given_z1[bin_idx]) > 0:
                 Esp_X_given_z1.append(torch.tensor(X_given_z1[bin_idx].astype('float32')).mean(dim=0))
                 f_dec_z1.append(self.ae.decoder1(self.ae.encoder(Esp_X_given_z1[-1])).detach().numpy())
@@ -1060,14 +1081,14 @@ class TainAETwoDecoder(TrainAE):
         inds = np.digitize(xi_values, z_bin)
         # distribute train data to each bin
         x1 = torch.sum((boltz_points - boltz_points_decoded1) ** 2, dim=1).detach().numpy() < torch.sum(
-            (boltz_points - boltz_points_decoded1) ** 2,
-            dim=1).detach().numpy()
-        x2 = torch.sum((boltz_points - boltz_points_decoded2) ** 2, dim=1).detach().numpy() < torch.sum(
             (boltz_points - boltz_points_decoded2) ** 2,
             dim=1).detach().numpy()
+        x2 = torch.sum((boltz_points - boltz_points_decoded2) ** 2, dim=1).detach().numpy() < torch.sum(
+            (boltz_points - boltz_points_decoded1) ** 2,
+            dim=1).detach().numpy()
         for bin_idx in range(n_bins):
-            X_given_z1[bin_idx] = boltz_points[x1 * (inds == bin_idx + 1), :2]
-            X_given_z2[bin_idx] = boltz_points[x2 * (inds == bin_idx + 1), :2]
+            X_given_z1[bin_idx] = self.dataset["boltz_points"][x1 * (inds == bin_idx + 1), :2]
+            X_given_z2[bin_idx] = self.dataset["boltz_points"][x2 * (inds == bin_idx + 1), :2]
             if len(X_given_z1[bin_idx]) > 0:
                 Esp_X_given_z1.append(torch.tensor(X_given_z1[bin_idx].astype('float32')).mean(dim=0))
                 f_dec_z1.append(self.ae.decoder1(self.ae.encoder(Esp_X_given_z1[-1])).detach().numpy())
