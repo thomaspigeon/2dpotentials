@@ -1,5 +1,5 @@
 import numpy as np
-
+import matplotlib.pyplot as plt
 
 class General2DPotential:
     """Class containing useful functions for all 2D potentials.
@@ -161,7 +161,8 @@ class General2DPotential:
     def plot_potential_heat_map(self, ax, set_lim=True):
         """Plot the potential heat map to the given ax
 
-        :param ax: Instance of matplotlib.axes.Axes"""
+        :param ax:       Instance of matplotlib.axes.Axes
+        :param set_lim:  Boolean, where the limits of the plot should be set """
         pot_on_grid = self.V(self.x2d).reshape(self.n_bins_x, self.n_bins_x)
         if set_lim:
             ax.set_ylim(self.y_domain[0], self.y_domain[1])

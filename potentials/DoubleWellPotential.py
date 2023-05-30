@@ -12,13 +12,12 @@ class DoubleWellPotential(General2DPotential):
                          0.1,
                          0.01,
                          [np.array([[0, 0]])],
-                         [-2.5, 2.5],
-                         [-1.5, 1.5],
-                         [0, 5],
+                         [-2.0, 2.0],
+                         [-1.0 / epsilon, 1.0 / epsilon],
+                         [0, 1.5],
                          100,
                          100)
         self.eps = epsilon
-        self.y_domain = [self.y_domain[0]/self.eps, self.y_domain[1]/self.eps]
         self.minimum_energy_paths = self.computeMEPs()
 
     def V(self, X):
