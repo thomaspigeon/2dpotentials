@@ -382,8 +382,7 @@ class TrainCommittorOverdamped:
         :return:
         """
         return torch.mean(
-            (self.committor_model.encoder(self.penalization_point[:, :2]) - self.penalization_point[:, 2] * torch.ones(
-                self.penalization_point[:, :2].shape)) ** 2)
+            (self.committor_model.encoder(self.penalization_point[:, :2]) - self.penalization_point[:, 2:] ) ** 2)
 
     def plot_committor_iso_levels(self, ax, n_lines, set_lim=False):
         """Plot the iso-lines of a given function to the given ax
