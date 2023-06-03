@@ -47,7 +47,7 @@ class TrainCommittorOverdamped:
         self.dataset = dataset
         if penalization_points is None:
             penalization_points = np.append(np.append(pot.minR, np.zeros([1, 1]), axis=1),
-                                            np.append(pot.minR, np.ones([1, 1]), axis=1),
+                                            np.append(pot.minP, np.ones([1, 1]), axis=1),
                                             axis=0)
             self.penalization_point = torch.tensor(penalization_points.astype('float32'))
         else:
