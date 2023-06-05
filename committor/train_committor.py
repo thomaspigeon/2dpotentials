@@ -58,7 +58,7 @@ class TrainCommittorOverdamped:
             self.dataset["any_distrib"][:, :2] = self.scaler.fit_transform(dataset["any_distrib"][:, :2])
             for i in range(2, self.dataset["any_distrib"].shape[1] - 2, 2):
                 self.dataset["any_distrib"][:, i:i+2] = self.scaler.transform(dataset["any_distrib"][:, i:i+2])
-            penalization_points = self.scaler.transform(penalization_points)
+            penalization_points[:, :2] = self.scaler.transform(penalization_points[:, :2])
             self.penalization_point = torch.tensor(penalization_points.astype('float32'))
             if "boltz_points" in dataset.keys():
                 self.dataset["boltz_points"] = self.scaler.transform(dataset["boltz_points"])
