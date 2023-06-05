@@ -23,7 +23,7 @@ class EntropicSwitchTrippleWellPotential(General2DPotential):
                          [-4,3],
                          100,
                          100)
-        self.minimum_energy_paths = self.computeMEPs()
+        self.minimum_energy_paths = self.computeMEPs(n=5000)
 
     def V(self, X):
         """Compute potential energy of an arbitrary number of points
