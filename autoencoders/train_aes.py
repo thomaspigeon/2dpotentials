@@ -341,7 +341,7 @@ class TrainAE:
         :return:
         """
         return torch.mean(
-            (self.committor_model.encoder(self.penalization_point[:, :2]) - self.penalization_point[:, 2:]) ** 2)
+            (self.ae.encoder(self.penalization_point[:, :2]) - self.penalization_point[:, 2:]) ** 2)
 
     @staticmethod
     def dist_dec_penalization(dec):
