@@ -49,6 +49,7 @@ class TrainAE:
         else:
             self.penalization_point = torch.tensor(penalization_points.astype('float32'))
         self.standadize = standardize
+        self.zca_whiten = zca_whiten
         if standardize:
             self.scaler = StandardScaler()
             self.dataset["boltz_points"] = self.scaler.fit_transform(dataset["boltz_points"])
@@ -56,8 +57,7 @@ class TrainAE:
             self.penalization_point = torch.tensor(penalization_points.astype('float32'))
             if "react_points" in dataset.keys():
                 self.dataset["react_points"] = self.scaler.transform(dataset["react_points"])
-        self.zca_whiten = zca_whiten
-        if zca_whiten:
+        elif zca_whiten:
             cov_matrix = np.cov(dataset["boltz_points"], rowvar=False)  # Compute covariance matrix
             U, D, V = np.linalg.svd(cov_matrix)  # Single value decompostion
             epsilon = 1e-12  # Small value to prevent division by 0
@@ -684,10 +684,8 @@ class TainAEOneDecoder(TrainAE):
         # compute index of bin
         inds = np.digitize(xi_values, z_bin)
         # distribute train data to each bin
-        bin_population = np.zeros(n_bins)
         for bin_idx in range(n_bins):
             X_given_z[bin_idx] = self.dataset["boltz_points"][inds == bin_idx + 1, :2]
-            bin_population[bin_idx] = len(X_given_z[bin_idx])
             if len(X_given_z[bin_idx]) != 0:
                 Esp_X_given_z.append(torch.tensor(X_given_z[bin_idx].astype('float32')).mean(dim=0))
                 f_dec_z.append(self.ae(Esp_X_given_z[-1]).detach().numpy())
@@ -704,7 +702,7 @@ class TainAEOneDecoder(TrainAE):
         grads_dec = np.array(grads_dec)
         cos_angles = np.sum(grads_enc * grads_dec, axis=1) / np.sqrt(
             (np.sum(grads_enc ** 2, axis=1) * np.sum(grads_dec ** 2, axis=1)))
-        dist_fec_exp = (bin_population / np.sum(bin_population)) * np.sum(
+        dist_fec_exp = np.sum(
             (np.array(Esp_X_given_z) - np.array(f_dec_z)) ** 2, axis=1)
         plt.figure()
         plt.plot(z_values, cos_angles)
