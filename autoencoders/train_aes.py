@@ -150,6 +150,14 @@ class TrainAE:
         else:
             self.pen_points_weight = loss_params["pen_points_weight"]
 
+        if "pen_points_mse_weight" not in loss_params.keys():
+            self.pen_points_mse_weight = 0.
+            print("""pen_points_mse_weight value not provided, set to default value of: """, self.pen_points_mse_weight)
+        elif type(loss_params["pen_points_mse_weight"]) != float or loss_params["pen_points_mse_weight"] < 0.:
+            raise ValueError("""loss_params["pen_points_weight"] must be a float >= 0.""")
+        else:
+            self.pen_points_mse_weight = loss_params["pen_points_mse_weight"]
+
         if "var_enc_weight" not in loss_params.keys():
             self.var_enc_weight = 0.
             print("""var_enc_weight value not provided, set to default value of: """, self.var_enc_weight)
@@ -462,6 +470,15 @@ class TainAEOneDecoder(TrainAE):
         """
         return torch.mean(inp[:, 5] * torch.sum((inp[:, 3:5] - out) ** 2, dim=1))
 
+    def pen_points_mse(self):
+        """MSE term for penalization points
+
+        :return:   torch float, mean squarred error between input en output on penalization points
+        """
+        return torch.mean(torch.sum(
+            (self.penalization_point[:, :2] - self.ae.decoder(self.ae.encoder(self.penalization_point[:, :2]))) ** 2,
+            dim=1))
+
     def train(self, batch_size, max_epochs):
         """ Do the training of the model self.ae
 
@@ -509,7 +526,8 @@ class TainAEOneDecoder(TrainAE):
                        self.var_enc_weight * var_enc + \
                        self.l1_pen_weight * l1_pen + \
                        self.l2_pen_weight * l2_pen + \
-                       self.pen_points_weight * self.penalization_on_points()
+                       self.pen_points_weight * self.penalization_on_points() + \
+                       self.pen_points_mse_weight * self.pen_points_mse()
                 if "react_points" in self.dataset.keys():
                     # Forward pass for reactive trajectories
                     enc_reac = self.ae.encoder(X[:, 3:5])
@@ -558,7 +576,8 @@ class TainAEOneDecoder(TrainAE):
                        self.var_enc_weight * var_enc + \
                        self.l1_pen_weight * l1_pen + \
                        self.l2_pen_weight * l2_pen + \
-                       self.pen_points_weight * self.penalization_on_points()
+                       self.pen_points_weight * self.penalization_on_points() + \
+                       self.pen_points_mse_weight * self.pen_points_mse()
                 if "react_points" in self.dataset.keys():
                     # Forward pass for reactive trajectories
                     enc_reac = self.ae.encoder(X[:, 3:5])
@@ -608,7 +627,8 @@ class TainAEOneDecoder(TrainAE):
                self.var_enc_weight * var_enc + \
                self.l1_pen_weight * l1_pen + \
                self.l2_pen_weight * l2_pen + \
-               self.pen_points_weight * self.penalization_on_points()
+               self.pen_points_weight * self.penalization_on_points() + \
+               self.pen_points_mse_weight * self.pen_points_mse()
         if "react_points" in self.dataset.keys():
             # Forward pass for reactive trajectories
             enc_reac = self.ae.encoder(X[:, 3:5])
@@ -809,6 +829,17 @@ class TainAETwoDecoder(TrainAE):
                           torch.minimum(torch.sum((inp[:, 3:5] - dec1) ** 2, dim=1),
                                         torch.sum((inp[:, 3:5] - dec2) ** 2, dim=1)))
 
+    def pen_points_mse(self):
+        """MSE term for penalization points
+
+        :return:   torch float, mean squarred error between input en output on penalization points
+        """
+        return torch.mean(
+            torch.sum((self.penalization_point[:, :2] - self.ae.decoder1(
+                self.ae.encoder(self.penalization_point[:, :2]))) ** 2, dim=1) +
+            torch.sum((self.penalization_point[:, :2] - self.ae.decoder2(
+                self.ae.encoder(self.penalization_point[:, :2]))) ** 2, dim=1))
+
     def train(self, batch_size, max_epochs):
         """ Do the training of the model self.ae
 
@@ -858,7 +889,8 @@ class TainAETwoDecoder(TrainAE):
                        self.squared_grad_boltz_weight * squared_grad_enc + \
                        self.l1_pen_weight * l1_pen + \
                        self.l2_pen_weight * l2_pen + \
-                       self.pen_points_weight * self.penalization_on_points()
+                       self.pen_points_weight * self.penalization_on_points() + \
+                       self.pen_points_mse_weight * self.pen_points_mse()
                 if "react_points" in self.dataset.keys():
                     # Forward pass for reactive trajectories
                     enc_reac = self.ae.encoder(X[:, 3:5])
@@ -912,7 +944,8 @@ class TainAETwoDecoder(TrainAE):
                        self.squared_grad_boltz_weight * squared_grad_enc + \
                        self.l1_pen_weight * l1_pen + \
                        self.l2_pen_weight * l2_pen + \
-                       self.pen_points_weight * self.penalization_on_points()
+                       self.pen_points_weight * self.penalization_on_points() + \
+                       self.pen_points_mse_weight * self.pen_points_mse()
                 if "react_points" in self.dataset.keys():
                     # Forward pass for reactive trajectories
                     enc_reac = self.ae.encoder(X[:, 3:5])
@@ -967,7 +1000,8 @@ class TainAETwoDecoder(TrainAE):
                self.squared_grad_boltz_weight * squared_grad_enc + \
                self.l1_pen_weight * l1_pen + \
                self.l2_pen_weight * l2_pen + \
-               self.pen_points_weight * self.penalization_on_points()
+               self.pen_points_weight * self.penalization_on_points() + \
+               self.pen_points_mse_weight * self.pen_points_mse()
         if "react_points" in self.dataset.keys():
             # Forward pass for reactive trajectories
             enc_reac = self.ae.encoder(X[:, 3:5])
