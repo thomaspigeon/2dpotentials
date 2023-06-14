@@ -1,7 +1,7 @@
 import numpy as np
 from potentials.General2DPotential import General2DPotential
 
-class DoubleWellAlongCircle(General2DPotential):
+class ZPotential(General2DPotential):
     """"Tripple well potential with two deep well and one less deep. The main path from one deep well to another
     for langevin dynamics switches with the temperature"""
     def __init__(self):
