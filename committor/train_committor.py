@@ -369,7 +369,7 @@ class TrainCommittorOverdamped:
         """
         if "boltz_points" in self.dataset.keys():
             return (inp[:, 2] * ((torch.autograd.grad(outputs=enc.sum(),
-                                                      inputs=inp[:, 0:2],
+                                                      inputs=inp,
                                                       retain_graph=True,
                                                       create_graph=True)[0][:, :2]) ** 2).sum(dim=1)).mean()
         else:
@@ -497,7 +497,7 @@ class TainCommittorOverdampedOneDecoder(TrainCommittorOverdamped):
         :return mse:    torch float, mean squared error between input and output for points distributed according to
                         Boltzmann-Gibbs measure.
         """
-        if "react_points" in self.dataset.keys() and "boltz_points" in self.dataset.keys():
+        if "boltz_points" in self.dataset.keys():
             return torch.mean(inp[:, 2] * torch.sum((inp[:, 0:2] - out) ** 2, dim=1))
         else:
             raise ValueError("""Cannot compute this term if there are no points distributed according to the Bolzmann-
