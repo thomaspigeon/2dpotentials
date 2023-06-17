@@ -14,7 +14,7 @@ class ZPotential(General2DPotential):
                           np.array([[7.20, -5.71]]), np.array([[-7.20, 5.71]])],
                          [-20, 20],
                          [-15, 15],
-                         [-4,3],
+                         [-2,5],
                          100,
                          100)
         self.minimum_energy_paths = self.computeMEPs(n=5000)
