@@ -687,7 +687,7 @@ class TainAEOneDecoder(TrainAE):
         ax.plot(Esp_X_given_z[:, 0], Esp_X_given_z[:, 1], '-o', color='blue', label='cond. avg. best model')
         ax.plot(f_dec_z[:, 0], f_dec_z[:, 1], '*', color='black', label='decoder best model')
 
-    def plot_principal_curve_convergence(self, n_bins):
+    def plot_principal_curve_convergence(self, n_bins, y_scale_dist=[0,025], y_scale_cosine=[0,1]):
         """Plot conditional averages computed on the full dataset to the given ax
 
         :param n_bins:          int, number of bins to compute conditional averages
@@ -726,10 +726,12 @@ class TainAEOneDecoder(TrainAE):
             (np.array(Esp_X_given_z) - np.array(f_dec_z)) ** 2, axis=1)
         plt.figure()
         plt.plot(z_values, cos_angles)
+        plt.ylim(y_scale_cosine[0], y_scale_cosine[1])
         plt.title('cosine of angle between the gradient of the encoder \n at the cdt. avg. and the derivative of the decoder')
         plt.show()
         plt.figure()
         plt.plot(z_values, dist_fec_exp)
+        plt.ylim(y_scale_dist[0], y_scale_dist[1])
         plt.title('distance between the decoder and the conditional average')
         plt.show()
 
