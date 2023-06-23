@@ -362,7 +362,8 @@ class TrainAE:
         return torch.var(torch.sqrt(torch.sum((dec[1:] - dec[:-1]) ** 2, dim=1)))
 
     def var_encoder(self):
-        return (torch.var(self.ae.encoder(self.train_data[:, :2])) - 1)**2
+        return (torch.mean(self.ae.encoder(self.train_data[:, :2]) ** 2) - torch.mean(
+            self.ae.encoder(self.train_data[:, :2])) ** 2 - 1) ** 2
 
     def plot_encoder_iso_levels(self, ax, n_lines, set_lim=False):
         """Plot the iso-lines of a given function to the given ax
