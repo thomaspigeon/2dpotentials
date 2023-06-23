@@ -1160,20 +1160,21 @@ class TainAETwoDecoder(TrainAE):
         dist_dec_exp2 = np.sum(
             (np.array(Esp_X_given_z2) - np.array(f_dec_z2)) ** 2, axis=1)
         plt.figure()
+        plt.title("""cosine of angle between the gradient of the encoder at the \n 
+                 cdt. avg. and the derivative of the n-th decoder""")
         plt.plot(z_values1, cos_angles1,
-                 label="""cosine of angle between the gradient of the encoder at the \n 
-                 cdt. avg. 1 and the derivative of the decoder1""")
+                 label="""decoder 1""")
         plt.plot(z_values2, cos_angles2,
-                 label="""cosine of angle between the gradient of the encoder at the \n 
-                 cdt. avg. 2 and the derivative of the decoder2""")
+                 label="""decoder 2""")
         plt.ylim(y_scale_cosine[0], y_scale_cosine[1])
         plt.legend()
         plt.show()
         plt.figure()
+        plt.title("""Distance between the n-th decoder and the n-th cdt. avg.""")
         plt.plot(z_values1, dist_dec_exp1,
-                 label='distance between the decoder 1 and the conditional average 1')
+                 label='decoder 1')
         plt.plot(z_values2, dist_dec_exp2,
-                 label='distance between the decoder 2 and the conditional average 2')
+                 label='decoder 2')
         plt.ylim(y_scale_dist[0], y_scale_dist[1])
         plt.legend()
         plt.show()
