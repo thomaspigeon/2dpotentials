@@ -687,7 +687,7 @@ class TainAEOneDecoder(TrainAE):
         ax.plot(Esp_X_given_z[:, 0], Esp_X_given_z[:, 1], '-o', color='blue', label='cond. avg. best model')
         ax.plot(f_dec_z[:, 0], f_dec_z[:, 1], '*', color='black', label='decoder best model')
 
-    def plot_principal_curve_convergence(self, n_bins, y_scale_dist=[0,025], y_scale_cosine=[0,1]):
+    def plot_principal_curve_convergence(self, n_bins, y_scale_dist=[0, 0.025], y_scale_cosine=[0, 1]):
         """Plot conditional averages computed on the full dataset to the given ax
 
         :param n_bins:          int, number of bins to compute conditional averages
@@ -1088,7 +1088,7 @@ class TainAETwoDecoder(TrainAE):
         ax.plot(f_dec_z1[:, 0], f_dec_z1[:, 1], '*', color='black', label='decoder 1')
         ax.plot(f_dec_z2[:, 0], f_dec_z2[:, 1], '*', color='pink', label='decoder 2')
 
-    def plot_principal_curve_convergence(self, n_bins,  y_scale_dist=[0,025], y_scale_cosine=[0,1]):
+    def plot_principal_curve_convergence(self, n_bins,  y_scale_dist=[0, 0.025], y_scale_cosine=[0, 1]):
         """Plot conditional averages computed on the full dataset to the given ax
 
         :param n_bins:          int, number of bins to compute conditional averages
