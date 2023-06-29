@@ -60,6 +60,13 @@ class AMSOverdampedLangevin(OverdampedLangevin):
         """
         self.xi = xi
 
+    def set_threshold(self, threshold):
+        """Method to reset the threshold for differences in xi to consider that two xi values are equal
+
+        :param threshold:  positive real value
+        """
+        self.threshold = threshold
+
     def sample_initial_conditions(self, n_conditions, x_0=None, save_grad=False, save_gauss=False):
         """Simple md to sample initial conditions, if it reaches the product state, the next position is one of the
         previously seen configuration during the .
