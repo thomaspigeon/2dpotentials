@@ -38,12 +38,12 @@ class CommittorOneDecoder(torch.nn.Module):
 
     def inR(self, inp):
         return 1 - (1 / 2 + (1 / 2) * self.HT(
-            (200 * (torch.sqrt(torch.sum((inp - self.minR) ** 2, dim=1)).reshape(
+            (20000 * (torch.sqrt(torch.sum((inp - self.minR) ** 2, dim=1)).reshape(
                 [len(inp), 1]) - self.R_radius) / self.R_radius) + 1))
 
     def inP(self, inp):
         return 1 - (1 / 2 + (1 / 2) * self.HT(
-            (200 * (torch.sqrt(torch.sum((inp - self.minP) ** 2, dim=1)).reshape(
+            (20000 * (torch.sqrt(torch.sum((inp - self.minP) ** 2, dim=1)).reshape(
                 [len(inp), 1]) - self.P_radius) / self.P_radius) + 1))
 
     def decoded(self, inp):
@@ -100,7 +100,7 @@ class CommittorTwoDecoder(torch.nn.Module):
         :param pot:             General2DPotential, object containing information concerning the potential et the
                                 definition of the reactant and product state
         """
-        super(CommittorOneDecoder, self).__init__()
+        super(CommittorTwoDecoder, self).__init__()
         layers = []
         for i in range(len(committor_dims) - 2):
             layers.append(torch.nn.Linear(committor_dims[i], committor_dims[i + 1]))
