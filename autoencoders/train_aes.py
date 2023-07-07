@@ -648,18 +648,24 @@ class TainAEOneDecoder(TrainAE):
         if "react_points" in self.dataset.keys():
             print("""Test MSE reactive: """, mse_react)
 
-    def plot_conditional_averages(self, ax, n_bins, set_lim=False):
+    def plot_conditional_averages(self, ax, n_bins, set_lim=False, with_react_dens=False):
         """Plot conditional averages computed on the full dataset to the given ax
 
         :param ax:              Instance of matplotlib.axes.Axes
         :param n_bins:          int, number of bins to compute conditional averages
         :param set_lim:         boolean, whether the limits of the x and y axes should be set.
+        :param with_react_dens: boolean, whether the ocnditional averages are computed with the reactive density or the
+                                boltzmann gibbs distribution
+
         :return bin_population: list of ints, len==n_bins, population of each bin
         """
         X_given_z = [[] for i in range(n_bins)]
         Esp_X_given_z = []
         f_dec_z = []
-        xi_values = self.ae.xi_ae(self.dataset["boltz_points"])[:, 0]
+        if with_react_dens:
+            xi_values = self.ae.xi_ae(self.dataset["react_points"])[:, 0]
+        else:
+            xi_values = self.ae.xi_ae(self.dataset["boltz_points"])[:, 0]
         # equal-width bins
         z_bin = np.linspace(xi_values.min(), xi_values.max(), n_bins)
         # compute index of bin
@@ -667,7 +673,10 @@ class TainAEOneDecoder(TrainAE):
         # distribute train data to each bin
         bin_population = np.zeros(n_bins)
         for bin_idx in range(n_bins):
-            X_given_z[bin_idx] = self.dataset["boltz_points"][inds == bin_idx + 1, :2]
+            if with_react_dens:
+                X_given_z[bin_idx] = self.dataset["react_points"][inds == bin_idx + 1, :2]
+            else:
+                X_given_z[bin_idx] = self.dataset["boltz_points"][inds == bin_idx + 1, :2]
             bin_population[bin_idx] = len(X_given_z[bin_idx])
             if len(X_given_z[bin_idx]) != 0:
                 Esp_X_given_z.append(torch.tensor(X_given_z[bin_idx].astype('float32')).mean(dim=0))
@@ -727,6 +736,7 @@ class TainAEOneDecoder(TrainAE):
             (np.array(Esp_X_given_z) - np.array(f_dec_z)) ** 2, axis=1)
         plt.figure()
         plt.plot(z_values, cos_angles)
+        plt.plot(z_values, np.ones(len(z_values)), linestyle='dashed', linewidth=0.5)
         plt.ylim(y_scale_cosine[0], y_scale_cosine[1])
         plt.title('cosine of angle between the gradient of the encoder \n at the cdt. avg. and the derivative of the decoder')
         plt.show()
@@ -1026,7 +1036,7 @@ class TainAETwoDecoder(TrainAE):
         if "react_points" in self.dataset.keys():
             print("""Test MSE reactive: """, mse_react)
 
-    def plot_conditional_averages(self, ax, n_bins, set_lim=False):
+    def plot_conditional_averages(self, ax, n_bins, set_lim=False, with_react_dens=False):
         """Plot conditional averages computed on the full dataset to the given ax
 
         :param ax:              Instance of matplotlib.axes.Axes
@@ -1040,7 +1050,10 @@ class TainAETwoDecoder(TrainAE):
         Esp_X_given_z2 = []
         f_dec_z1 = []
         f_dec_z2 = []
-        boltz_points = torch.tensor(self.dataset["boltz_points"].astype('float32'))
+        if with_react_dens:
+            boltz_points = torch.tensor(self.dataset["react_points"].astype('float32'))
+        else:
+            boltz_points = torch.tensor(self.dataset["boltz_points"].astype('float32'))
         boltz_points_decoded1 = self.ae.decoder1(self.ae.encoder(boltz_points))
         boltz_points_decoded2 = self.ae.decoder2(self.ae.encoder(boltz_points))
         xi_values = self.ae.xi_ae(self.dataset["boltz_points"])[:, 0]
@@ -1056,8 +1069,12 @@ class TainAETwoDecoder(TrainAE):
             (boltz_points - boltz_points_decoded1) ** 2,
             dim=1).detach().numpy()
         for bin_idx in range(n_bins):
-            X_given_z1[bin_idx] = self.dataset["boltz_points"][x1 * (inds == bin_idx + 1), :2]
-            X_given_z2[bin_idx] = self.dataset["boltz_points"][x2 * (inds == bin_idx + 1), :2]
+            if with_react_dens:
+                X_given_z1[bin_idx] = self.dataset["react_points"][x1 * (inds == bin_idx + 1), :2]
+                X_given_z2[bin_idx] = self.dataset["react_points"][x2 * (inds == bin_idx + 1), :2]
+            else:
+                X_given_z1[bin_idx] = self.dataset["boltz_points"][x1 * (inds == bin_idx + 1), :2]
+                X_given_z2[bin_idx] = self.dataset["boltz_points"][x2 * (inds == bin_idx + 1), :2]
             if len(X_given_z1[bin_idx]) > 0:
                 Esp_X_given_z1.append(torch.tensor(X_given_z1[bin_idx].astype('float32')).mean(dim=0))
                 f_dec_z1.append(self.ae.decoder1(self.ae.encoder(Esp_X_given_z1[-1])).detach().numpy())
@@ -1084,12 +1101,18 @@ class TainAETwoDecoder(TrainAE):
         if set_lim:
             ax.set_ylim(self.pot.y_domain[0], self.pot.y_domain[1])
             ax.set_xlim(self.pot.x_domain[0], self.pot.x_domain[1])
-        ax.plot(Esp_X_given_z1[:, 0], Esp_X_given_z1[:, 1], '-o', color='blue', label='cond. avg. decoder 1')
-        ax.plot(Esp_X_given_z2[:, 0], Esp_X_given_z2[:, 1], '-o', color='purple', label='cond. avg. decoder 2')
+        ax.plot(Esp_X_given_z1[:, 0], Esp_X_given_z1[:, 1], '-o', color='midnightblue', label='cond. avg. decoder 1')
+        ax.plot(Esp_X_given_z2[:, 0], Esp_X_given_z2[:, 1], '-o', color='brown', label='cond. avg. decoder 2')
+        ax.scatter(self.dataset["boltz_points"][x1][:, 0],
+                   self.dataset["boltz_points"][x1][:, 1], color='blue', label='decoder1', s=1,
+                   alpha=0.2)
+        ax.scatter(self.dataset["boltz_points"][x2][:, 0],
+                   self.dataset["boltz_points"][x2][:, 1], color='purple', label='decoder2', s=1,
+                   alpha=0.2)
         ax.plot(f_dec_z1[:, 0], f_dec_z1[:, 1], '*', color='black', label='decoder 1')
         ax.plot(f_dec_z2[:, 0], f_dec_z2[:, 1], '*', color='pink', label='decoder 2')
 
-    def plot_principal_curve_convergence(self, n_bins,  y_scale_dist=[0, 0.025], y_scale_cosine=[0.5, 1.1]):
+    def plot_principal_curve_convergence(self, n_bins,  y_scale_dist=[0, 0.025], y_scale_cosine=[0.5, 1.1], plt_title=False):
         """Plot conditional averages computed on the full dataset to the given ax
 
         :param n_bins:          int, number of bins to compute conditional averages
@@ -1161,7 +1184,8 @@ class TainAETwoDecoder(TrainAE):
         dist_dec_exp2 = np.sum(
             (np.array(Esp_X_given_z2) - np.array(f_dec_z2)) ** 2, axis=1)
         plt.figure()
-        plt.title("""cosine of angle between the gradient of the encoder at the \n 
+        if plt_title:
+            plt.title("""cosine of angle between the gradient of the encoder at the \n 
                  cdt. avg. and the derivative of the n-th decoder""")
         plt.plot(z_values1, cos_angles1,
                  label="""decoder 1""")
@@ -1171,7 +1195,8 @@ class TainAETwoDecoder(TrainAE):
         plt.legend()
         plt.show()
         plt.figure()
-        plt.title("""Distance between the n-th decoder and the n-th cdt. avg.""")
+        if plt_title:
+            plt.title("""Distance between the n-th decoder and the n-th cdt. avg.""")
         plt.plot(z_values1, dist_dec_exp1,
                  label='decoder 1')
         plt.plot(z_values2, dist_dec_exp2,
