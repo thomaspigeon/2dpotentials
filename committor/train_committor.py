@@ -53,7 +53,7 @@ class TrainCommittorOverdamped:
         else:
             self.penalization_point = torch.tensor(penalization_points.astype('float32'))
         self.standadize = standardize
-        if standardize:
+        if self.standardize:
             self.scaler = StandardScaler()
             self.dataset["any_distrib"][:, :2] = self.scaler.fit_transform(dataset["any_distrib"][:, :2])
             for i in range(2, self.dataset["any_distrib"].shape[1] - 2, 2):
@@ -65,7 +65,7 @@ class TrainCommittorOverdamped:
             if "react_points" in dataset.keys():
                 self.dataset["react_points"] = self.scaler.transform(dataset["react_points"])
         self.zca_whiten = zca_whiten
-        if zca_whiten:
+        if self.zca_whiten:
             cov_matrix = np.cov(dataset["any_distrib"][:, :2], rowvar=False)  # Compute covariance matrix
             U, D, V = np.linalg.svd(cov_matrix)  # Single value decompostion
             epsilon = 1e-12  # Small value to prevent division by 0
@@ -188,6 +188,27 @@ class TrainCommittorOverdamped:
                                     dataset["react_weights"] can be set as well, set to 1 if not provided
         """
         self.dataset = dataset
+        if self.standardize:
+            self.scaler = StandardScaler()
+            self.dataset["any_distrib"][:, :2] = self.scaler.fit_transform(dataset["any_distrib"][:, :2])
+            for i in range(2, self.dataset["any_distrib"].shape[1] - 2, 2):
+                self.dataset["any_distrib"][:, i:i+2] = self.scaler.transform(dataset["any_distrib"][:, i:i+2])
+            if "boltz_points" in dataset.keys():
+                self.dataset["boltz_points"] = self.scaler.transform(dataset["boltz_points"])
+            if "react_points" in dataset.keys():
+                self.dataset["react_points"] = self.scaler.transform(dataset["react_points"])
+        if self.zca_whiten:
+            cov_matrix = np.cov(dataset["any_distrib"][:, :2], rowvar=False)  # Compute covariance matrix
+            U, D, V = np.linalg.svd(cov_matrix)  # Single value decompostion
+            epsilon = 1e-12  # Small value to prevent division by 0
+            self.ZCAMatrix = np.dot(U, np.dot(np.diag(1.0 / np.sqrt(D + epsilon)), U.T))
+            self.dataset["any_distrib"][:, :2] = self.ZCAMatrix.dot(dataset["any_distrib"][:, :2].T).T
+            for i in range(2, self.dataset["any_distrib"].shape[1] - 2, 2):
+                self.dataset["any_distrib"][:, i:i+2] = self.ZCAMatrix.dot(dataset["any_distrib"][:, i:i+2].T).T
+            if "boltz_points" in dataset.keys():
+                self.dataset["boltz_points"] = self.ZCAMatrix.dot(dataset["boltz_points"].T).T
+            if "react_points" in dataset.keys():
+                self.dataset["react_points"] = self.ZCAMatrix.dot(dataset["react_points"].T).T
         self.training_dataset = None
         self.test_dataset = None
         self.Kfold_splits = None
@@ -922,13 +943,13 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
                         Boltzmann-Gibbs measure.
         """
         if "react_points" in self.dataset.keys() and "boltz_points" in self.dataset.keys():
-            return torch.mean(inp[:, 8] *
-                              torch.minimum(torch.sum((inp[:, 6:8] - dec1) ** 2, dim=1),
-                                            torch.sum((inp[:, 6:8] - dec2) ** 2, dim=1)))
+            return torch.mean(inp[:, 2] *
+                              torch.minimum(torch.sum((inp[:, 0:2] - dec1) ** 2, dim=1),
+                                            torch.sum((inp[:, 0:2] - dec2) ** 2, dim=1)))
         elif "react_points" not in self.dataset.keys() and "boltz_points" in self.dataset.keys():
-            return torch.mean(inp[:, 8] *
-                              torch.minimum(torch.sum((inp[:, 6:8] - dec1) ** 2, dim=1),
-                                            torch.sum((inp[:, 6:8] - dec2) ** 2, dim=1)))
+            return torch.mean(inp[:, 2] *
+                              torch.minimum(torch.sum((inp[:, 0:2] - dec1) ** 2, dim=1),
+                                            torch.sum((inp[:, 0:2] - dec2) ** 2, dim=1)))
         else:
             raise ValueError("""Cannot compute this term if there are no points distributed according to the Bolzmann-
                                 Gibbs measure in the dataset""")
@@ -943,13 +964,13 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
                         Boltzmann-Gibbs measure.
         """
         if "react_points" in self.dataset.keys() and "boltz_points" in self.dataset.keys():
-            return torch.mean(inp[:, 11] *
-                              torch.minimum(torch.sum((inp[:, 9:11] - dec1) ** 2, dim=1),
-                                            torch.sum((inp[:, 9:11] - dec2) ** 2, dim=1)))
-        elif "react_points" not in self.dataset.keys() and "boltz_points" in self.dataset.keys():
-            return torch.mean(inp[:, 8] *
-                              torch.minimum(torch.sum((inp[:, 6:8] - dec1) ** 2, dim=1),
-                                            torch.sum((inp[:, 6:8] - dec2) ** 2, dim=1)))
+            return torch.mean(inp[:, 5] *
+                              torch.minimum(torch.sum((inp[:, 3:5] - dec1) ** 2, dim=1),
+                                            torch.sum((inp[:, 3:5] - dec2) ** 2, dim=1)))
+        elif "react_points" in self.dataset.keys() and "boltz_points" not in self.dataset.keys():
+            return torch.mean(inp[:, 2] *
+                              torch.minimum(torch.sum((inp[:, 0:2] - dec1) ** 2, dim=1),
+                                            torch.sum((inp[:, 0:2] - dec2) ** 2, dim=1)))
         else:
             raise ValueError("""Cannot compute this term if there are no points distributed according to the reactive
                                 trajectory measure in the dataset""")
@@ -994,50 +1015,57 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
                 X.requires_grad_()
                 # Set the gradient of with respect to parameters to zero
                 self.optimizer.zero_grad()
-                # Forward pass for boltzmann gibbs distributed points
-                committor = self.committor_model.committor(X[:, :2])
-                # Compute the various loss terms
-                ito_term = self.ito_loss_term(X, committor)
                 l1_pen = self.l1_penalization(self.committor_model)
                 l2_pen = self.l2_penalization(self.committor_model)
-                loss = self.ito_loss_weight * ito_term + \
-                       self.l1_pen_weight * l1_pen + \
+                loss = self.l1_pen_weight * l1_pen + \
                        self.l2_pen_weight * l2_pen + \
                        self.pen_points_weight * self.penalization_on_points()
-                loss_dict["train_ito_loss"][epoch].append(ito_term.detach().numpy())
+
                 if "boltz_points" in self.dataset.keys() and "react_points" in self.dataset.keys():
-                    enc = self.committor_model.encoder(X[:, 6:8])
+                    enc = self.committor_model.encoder(X[:, 0:2])
                     dec1 = self.committor_model.decoder1(enc)
                     dec2 = self.committor_model.decoder2(enc)
                     mse_blotz = self.mse_loss_boltz(X, dec1, dec2)
                     squared_grad_enc_boltz = self.squared_grad_encoder_penalization_boltz(X, enc)
-                    enc_reac = self.committor_model.encoder(X[:, 9:11])
+                    enc_reac = self.committor_model.encoder(X[:, 3:5])
                     dec_reac1 = self.committor_model.decoder1(enc_reac)
                     dec_reac2 = self.committor_model.decoder2(enc_reac)
                     mse_react = self.mse_loss_react(X, dec_reac1, dec_reac2)
-                    loss += self.mse_boltz_weight * mse_blotz + \
+                    ito_term = self.ito_loss_term(X[:, 6:])
+                    loss += self.ito_loss_weight * ito_term + \
+                            self.mse_boltz_weight * mse_blotz + \
                             self.squared_grad_boltz_weight * squared_grad_enc_boltz + \
                             self.mse_react_weight * mse_react
-                    loss_dict["train_mse_react"][epoch].append(mse_blotz.detach().numpy())
+                    loss_dict["train_mse_boltz"][epoch].append(mse_blotz.detach().numpy())
                     loss_dict["train_squared_grad_enc_blotz"][epoch].append(squared_grad_enc_boltz.detach().numpy())
                     loss_dict["train_mse_react"][epoch].append(mse_react.detach().numpy())
+
                 elif "boltz_points" in self.dataset.keys() and "react_points" not in self.dataset.keys():
-                    enc = self.committor_model.encoder(X[:, 6:8])
+                    enc = self.committor_model.encoder(X[:, 0:2])
                     dec1 = self.committor_model.decoder1(enc)
                     dec2 = self.committor_model.decoder2(enc)
                     mse_blotz = self.mse_loss_boltz(X, dec1, dec2)
                     squared_grad_enc_boltz = self.squared_grad_encoder_penalization_boltz(X, enc)
-                    loss += self.mse_boltz_weight * mse_blotz + \
+                    ito_term = self.ito_loss_term(X[:, 3:])
+                    loss += self.ito_loss_weight * ito_term + \
+                            self.mse_boltz_weight * mse_blotz + \
                             self.squared_grad_boltz_weight * squared_grad_enc_boltz
-                    loss_dict["train_mse_react"][epoch].append(mse_blotz.detach().numpy())
+                    loss_dict["train_mse_boltz"][epoch].append(mse_blotz.detach().numpy())
                     loss_dict["train_squared_grad_enc_blotz"][epoch].append(squared_grad_enc_boltz.detach().numpy())
+
                 elif "boltz_points" not in self.dataset.keys() and "react_points" in self.dataset.keys():
-                    enc_reac = self.committor_model.encoder(X[:, 6:8])
+                    enc_reac = self.committor_model.encoder(X[:, 0:2])
                     dec_reac1 = self.committor_model.decoder1(enc_reac)
                     dec_reac2 = self.committor_model.decoder2(enc_reac)
                     mse_react = self.mse_loss_react(X, dec_reac1, dec_reac2)
-                    loss += self.mse_react_weight * mse_react
+                    ito_term = self.ito_loss_term(X[:, 3:])
+                    loss += self.ito_loss_weight * ito_term + \
+                            self.mse_react_weight * mse_react
                     loss_dict["train_mse_react"][epoch].append(mse_react.detach().numpy())
+                else:
+                    ito_term = self.ito_loss_term(X)
+                    loss += self.ito_loss_weight * ito_term
+                loss_dict["train_ito_loss"][epoch].append(ito_term.detach().numpy())
                 loss_dict["train_loss"][epoch].append(loss.detach().numpy())
                 loss.backward()
                 self.optimizer.step()
@@ -1059,51 +1087,56 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
             self.committor_model.eval()
             for iteration, X in enumerate(test_loader):
                 # Set gradient calculation capabilities
+                # Set gradient calculation capabilities
                 X.requires_grad_()
-                # Forward pass for boltzmann gibbs distributed points
-                committor = self.committor_model.committor(X[:, :2])
-                # Compute the various loss terms
-                ito_term = self.ito_loss_term(X, committor)
                 l1_pen = self.l1_penalization(self.committor_model)
                 l2_pen = self.l2_penalization(self.committor_model)
-                loss = self.ito_loss_weight * ito_term + \
-                       self.l1_pen_weight * l1_pen + \
+                loss = self.l1_pen_weight * l1_pen + \
                        self.l2_pen_weight * l2_pen + \
                        self.pen_points_weight * self.penalization_on_points()
-                loss_dict["test_ito_loss"][epoch].append(ito_term.detach().numpy())
                 if "boltz_points" in self.dataset.keys() and "react_points" in self.dataset.keys():
-                    enc = self.committor_model.encoder(X[:, 6:8])
+                    enc = self.committor_model.encoder(X[:, 0:2])
                     dec1 = self.committor_model.decoder1(enc)
                     dec2 = self.committor_model.decoder2(enc)
                     mse_blotz = self.mse_loss_boltz(X, dec1, dec2)
                     squared_grad_enc_boltz = self.squared_grad_encoder_penalization_boltz(X, enc)
-                    enc_reac = self.committor_model.encoder(X[:, 9:11])
+                    enc_reac = self.committor_model.encoder(X[:, 3:5])
                     dec_reac1 = self.committor_model.decoder1(enc_reac)
                     dec_reac2 = self.committor_model.decoder2(enc_reac)
                     mse_react = self.mse_loss_react(X, dec_reac1, dec_reac2)
-                    loss += self.mse_boltz_weight * mse_blotz + \
+                    ito_term = self.ito_loss_term(X[:, 6:])
+                    loss += self.ito_loss_weight * ito_term + \
+                            self.mse_boltz_weight * mse_blotz + \
                             self.squared_grad_boltz_weight * squared_grad_enc_boltz + \
                             self.mse_react_weight * mse_react
                     loss_dict["test_mse_boltz"][epoch].append(mse_blotz.detach().numpy())
                     loss_dict["test_squared_grad_enc_blotz"][epoch].append(squared_grad_enc_boltz.detach().numpy())
                     loss_dict["test_mse_react"][epoch].append(mse_react.detach().numpy())
                 elif "boltz_points" in self.dataset.keys() and "react_points" not in self.dataset.keys():
-                    enc = self.committor_model.encoder(X[:, 6:8])
+                    enc = self.committor_model.encoder(X[:, 0:2])
                     dec1 = self.committor_model.decoder1(enc)
                     dec2 = self.committor_model.decoder2(enc)
                     mse_blotz = self.mse_loss_boltz(X, dec1, dec2)
                     squared_grad_enc_boltz = self.squared_grad_encoder_penalization_boltz(X, enc)
-                    loss += self.mse_boltz_weight * mse_blotz + \
+                    ito_term = self.ito_loss_term(X[:, 3:])
+                    loss += self.ito_loss_weight * ito_term + \
+                            self.mse_boltz_weight * mse_blotz + \
                             self.squared_grad_boltz_weight * squared_grad_enc_boltz
                     loss_dict["test_mse_boltz"][epoch].append(mse_blotz.detach().numpy())
                     loss_dict["test_squared_grad_enc_blotz"][epoch].append(squared_grad_enc_boltz.detach().numpy())
                 elif "boltz_points" not in self.dataset.keys() and "react_points" in self.dataset.keys():
-                    enc_reac = self.committor_model.encoder(X[:, 6:8])
+                    enc_reac = self.committor_model.encoder(X[:, 0:2])
                     dec_reac1 = self.committor_model.decoder1(enc_reac)
                     dec_reac2 = self.committor_model.decoder2(enc_reac)
                     mse_react = self.mse_loss_react(X, dec_reac1, dec_reac2)
-                    loss += self.mse_react_weight * mse_react
+                    ito_term = self.ito_loss_term(X[:, 3:])
+                    loss += self.ito_loss_weight * ito_term + \
+                            self.mse_react_weight * mse_react
                     loss_dict["test_mse_react"][epoch].append(mse_react.detach().numpy())
+                else:
+                    ito_term = self.ito_loss_term(X)
+                    loss += self.ito_loss_weight * ito_term
+                loss_dict["test_ito_loss"][epoch].append(ito_term.detach().numpy())
                 loss_dict["test_loss"][epoch].append(loss.detach().numpy())
                 loss.backward()
                 self.optimizer.step()
@@ -1131,49 +1164,55 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
         """Print the test loss and its various components"""
         X = self.test_dataset
         X.requires_grad_()
-        committor = self.committor_model.committor(X[:, :2])
-        # Compute the various loss terms
-        ito_term = self.ito_loss_term(X, committor)
         l1_pen = self.l1_penalization(self.committor_model)
         l2_pen = self.l2_penalization(self.committor_model)
-        loss = self.ito_loss_weight * ito_term + \
-               self.l1_pen_weight * l1_pen + \
+        loss = self.l1_pen_weight * l1_pen + \
                self.l2_pen_weight * l2_pen + \
                self.pen_points_weight * self.penalization_on_points()
-        print("""Test Ito term loss: """, ito_term)
+
         if "boltz_points" in self.dataset.keys() and "react_points" in self.dataset.keys():
-            enc = self.committor_model.encoder(X[:, 6:8])
+            enc = self.committor_model.encoder(X[:, 0:2])
             dec1 = self.committor_model.decoder1(enc)
             dec2 = self.committor_model.decoder2(enc)
             mse_blotz = self.mse_loss_boltz(X, dec1, dec2)
             squared_grad_enc_boltz = self.squared_grad_encoder_penalization_boltz(X, enc)
-            enc_reac = self.committor_model.encoder(X[:, 9:11])
+            enc_reac = self.committor_model.encoder(X[:, 3:5])
             dec_reac1 = self.committor_model.decoder1(enc_reac)
             dec_reac2 = self.committor_model.decoder2(enc_reac)
             mse_react = self.mse_loss_react(X, dec_reac1, dec_reac2)
-            loss += self.mse_boltz_weight * mse_blotz + \
+            ito_term = self.ito_loss_term(X[:, 6:])
+            loss += self.ito_loss_weight * ito_term + \
+                    self.mse_boltz_weight * mse_blotz + \
                     self.squared_grad_boltz_weight * squared_grad_enc_boltz + \
                     self.mse_react_weight * mse_react
             print("""Test MSE Boltzmann: """, mse_blotz)
             print("""Test squarred grad encoder boltzmann: """, squared_grad_enc_boltz)
             print("""Test MSE reactive: """, mse_react)
         elif "boltz_points" in self.dataset.keys() and "react_points" not in self.dataset.keys():
-            enc = self.committor_model.encoder(X[:, 6:8])
+            enc = self.committor_model.encoder(X[:, 0:2])
             dec1 = self.committor_model.decoder1(enc)
             dec2 = self.committor_model.decoder2(enc)
             mse_blotz = self.mse_loss_boltz(X, dec1, dec2)
             squared_grad_enc_boltz = self.squared_grad_encoder_penalization_boltz(X, enc)
-            loss += self.mse_boltz_weight * mse_blotz + \
+            ito_term = self.ito_loss_term(X[:, 3:])
+            loss += self.ito_loss_weight * ito_term + \
+                    self.mse_boltz_weight * mse_blotz + \
                     self.squared_grad_boltz_weight * squared_grad_enc_boltz
             print("""Test MSE Boltzmann: """, mse_blotz)
             print("""Test squarred grad encoder boltzmann: """, squared_grad_enc_boltz)
         elif "boltz_points" not in self.dataset.keys() and "react_points" in self.dataset.keys():
-            enc_reac = self.committor_model.encoder(X[:, 6:8])
+            enc_reac = self.committor_model.encoder(X[:, 0:2])
             dec_reac1 = self.committor_model.decoder1(enc_reac)
             dec_reac2 = self.committor_model.decoder2(enc_reac)
             mse_react = self.mse_loss_react(X, dec_reac1, dec_reac2)
-            loss += self.mse_react_weight * mse_react
+            ito_term = self.ito_loss_term(X[:, 3:])
+            loss += self.ito_loss_weight * ito_term + \
+                    self.mse_react_weight * mse_react
             print("""Test MSE reative: """, mse_react)
+        else:
+            ito_term = self.ito_loss_term(X)
+            loss += self.ito_loss_weight * ito_term
+        print("""Test Ito term loss: """, ito_term)
         print("""Test loss: """, loss)
 
     def plot_conditional_averages(self, ax, n_bins, set_lim=False):
@@ -1190,30 +1229,30 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
         Esp_X_given_z2 = []
         f_dec_z1 = []
         f_dec_z2 = []
-        boltz_points = torch.tensor(self.dataset["boltz_points"].astype('float32'))
-        boltz_points_decoded1 = self.committor_model.decoder1(self.committor_model.encoder(boltz_points))
-        boltz_points_decoded2 = self.committor_model.decoder2(self.committor_model.encoder(boltz_points))
-        xi_values = self.committor_model.xi_forward(self.dataset["boltz_points"])[:, 0]
+        react_points = torch.tensor(self.dataset["react_points"].astype('float32'))
+        react_points_decoded1 = self.committor_model.decoder1(self.committor_model.encoder(react_points))
+        react_points_decoded2 = self.committor_model.decoder2(self.committor_model.encoder(react_points))
+        xi_values = self.committor_model.xi_forward(self.dataset["react_points"])[:, :2]
         # equal-width bins
         z_bin = np.linspace(xi_values.min(), xi_values.max(), n_bins)
         # compute index of bin
         inds = np.digitize(xi_values, z_bin)
         # distribute train data to each bin
-        x1 = torch.sum((boltz_points - boltz_points_decoded1) ** 2, dim=1).detach().numpy() < torch.sum(
-            (boltz_points - boltz_points_decoded1) ** 2,
+        x1 = torch.sum((react_points - react_points_decoded1) ** 2, dim=1).detach().numpy() < torch.sum(
+            (react_points - react_points_decoded2) ** 2,
             dim=1).detach().numpy()
-        x2 = torch.sum((boltz_points - boltz_points_decoded2) ** 2, dim=1).detach().numpy() < torch.sum(
-            (boltz_points - boltz_points_decoded2) ** 2,
+        x2 = torch.sum((react_points - react_points_decoded2) ** 2, dim=1).detach().numpy() < torch.sum(
+            (react_points - react_points_decoded1) ** 2,
             dim=1).detach().numpy()
         for bin_idx in range(n_bins):
-            X_given_z1[bin_idx] = boltz_points[x1 * (inds == bin_idx + 1), :2]
-            X_given_z2[bin_idx] = boltz_points[x2 * (inds == bin_idx + 1), :2]
+            X_given_z1[bin_idx] = react_points[x1 * (inds == bin_idx + 1), :2]
+            X_given_z2[bin_idx] = react_points[x2 * (inds == bin_idx + 1), :2]
             if len(X_given_z1[bin_idx]) > 0:
-                Esp_X_given_z1.append(torch.tensor(X_given_z1[bin_idx].astype('float32')).mean(dim=0))
+                Esp_X_given_z1.append(X_given_z1[bin_idx].mean(dim=0))
                 f_dec_z1.append(self.committor_model.decoder1(self.committor_model.encoder(Esp_X_given_z1[-1])).detach().numpy())
                 Esp_X_given_z1[-1] = Esp_X_given_z1[-1].detach().numpy()
             if len(X_given_z2[bin_idx]) > 0:
-                Esp_X_given_z2.append(torch.tensor(X_given_z2[bin_idx].astype('float32')).mean(dim=0))
+                Esp_X_given_z2.append(X_given_z2[bin_idx].mean(dim=0))
                 f_dec_z2.append(self.committor_model.decoder2(self.committor_model.encoder(Esp_X_given_z2[-1])).detach().numpy())
                 Esp_X_given_z2[-1] = Esp_X_given_z2[-1].detach().numpy()
         if self.standadize:
@@ -1234,8 +1273,14 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
         if set_lim:
             ax.set_ylim(self.pot.y_domain[0], self.pot.y_domain[1])
             ax.set_xlim(self.pot.x_domain[0], self.pot.x_domain[1])
-        ax.plot(Esp_X_given_z1[:, 0], Esp_X_given_z1[:, 1], '-o', color='blue', label='cond. avg. decoder 1')
-        ax.plot(Esp_X_given_z2[:, 0], Esp_X_given_z2[:, 1], '-o', color='purple', label='cond. avg. decoder 2')
+        ax.plot(Esp_X_given_z1[:, 0], Esp_X_given_z1[:, 1], '-o', color='midnightblue', label='cond. avg. decoder 1')
+        ax.plot(Esp_X_given_z2[:, 0], Esp_X_given_z2[:, 1], '-o', color='brown', label='cond. avg. decoder 2')
+        ax.scatter(self.dataset["react_points"][x1][:, 0],
+                    self.dataset["react_points"][x1][:, 1], color='blue', label='decoder1', s=1,
+                    alpha=0.2)
+        ax.scatter(self.dataset["react_points"][x2][:, 0],
+                    self.dataset["react_points"][x2][:, 1], color='purple', label='decoder2', s=1,
+                    alpha=0.2)
         ax.plot(f_dec_z1[:, 0], f_dec_z1[:, 1], '*', color='black', label='decoder 1')
         ax.plot(f_dec_z2[:, 0], f_dec_z2[:, 1], '*', color='pink', label='decoder 2')
 
