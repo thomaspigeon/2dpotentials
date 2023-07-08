@@ -48,7 +48,7 @@ class TrainAE:
             self.penalization_point = torch.tensor(penalization_points.astype('float32'))
         else:
             self.penalization_point = torch.tensor(penalization_points.astype('float32'))
-        self.standadize = standardize
+        self.standardize = standardize
         self.zca_whiten = zca_whiten
         if standardize:
             self.scaler = StandardScaler()
@@ -371,7 +371,7 @@ class TrainAE:
         :param ax:         Instance of matplotlib.axes.Axes
         :param n_lines:    int, number of iso-lines to plot
         :param set_lim:    boolean, whether the limits of the x and y axes should be set."""
-        if self.standadize:
+        if self.standardize:
             x = self.scaler.transform(self.pot.x2d)
         elif self.zca_whiten:
             x = self.ZCAMatrix.dot(self.pot.x2d.T).T
@@ -682,7 +682,7 @@ class TainAEOneDecoder(TrainAE):
                 Esp_X_given_z.append(torch.tensor(X_given_z[bin_idx].astype('float32')).mean(dim=0))
                 f_dec_z.append(self.ae(Esp_X_given_z[-1]).detach().numpy())
                 Esp_X_given_z[-1] = Esp_X_given_z[-1].detach().numpy()
-        if self.standadize:
+        if self.standardize:
             Esp_X_given_z = self.scaler.inverse_transform(np.array(Esp_X_given_z))
             f_dec_z = self.scaler.inverse_transform(np.array(f_dec_z))
         elif self.zca_whiten:
@@ -1085,7 +1085,7 @@ class TainAETwoDecoder(TrainAE):
                 Esp_X_given_z2.append(torch.tensor(X_given_z2[bin_idx].astype('float32')).mean(dim=0))
                 f_dec_z2.append(self.ae.decoder2(self.ae.encoder(Esp_X_given_z2[-1])).detach().numpy())
                 Esp_X_given_z2[-1] = Esp_X_given_z2[-1].detach().numpy()
-        if self.standadize:
+        if self.standardize:
             Esp_X_given_z1 = self.scaler.inverse_transform(np.array(Esp_X_given_z1))
             f_dec_z1 = self.scaler.inverse_transform(np.array(f_dec_z1))
             Esp_X_given_z2 = self.scaler.inverse_transform(np.array(Esp_X_given_z2))
