@@ -52,7 +52,7 @@ class TrainCommittorOverdamped:
             self.penalization_point = torch.tensor(penalization_points.astype('float32'))
         else:
             self.penalization_point = torch.tensor(penalization_points.astype('float32'))
-        self.standadize = standardize
+        self.standardize = standardize
         if self.standardize:
             self.scaler = StandardScaler()
             self.dataset["any_distrib"][:, :2] = self.scaler.fit_transform(dataset["any_distrib"][:, :2])
