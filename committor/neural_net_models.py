@@ -2,7 +2,7 @@ import torch
 
 
 class CommittorOneDecoder(torch.nn.Module):
-    def __init__(self, committor_dims, decoder_dims, dropout, pot):
+    def __init__(self, committor_dims, decoder_dims, dropout, pot, boundary_width=0.1):
         """Initialise auto encoder with hyperbolic tangent activation function
 
         :param committor_dims:  list, List of dimensions for encoder, including input/output layers
@@ -10,8 +10,10 @@ class CommittorOneDecoder(torch.nn.Module):
         :param dropout:         int, value of the dropout probability
         :param pot:             General2DPotential, object containing information concerning the potential et the
                                 definition of the reactant and product state
+        :param boundary_width:  float, witdth of the boundary of the definition of states
         """
         super(CommittorOneDecoder, self).__init__()
+        self.boundary_width = boundary_width
         layers = []
         for i in range(len(committor_dims) - 2):
             layers.append(torch.nn.Linear(committor_dims[i], committor_dims[i + 1]))
@@ -38,12 +40,12 @@ class CommittorOneDecoder(torch.nn.Module):
 
     def inR(self, inp):
         return 1 - (1 / 2 + (1 / 2) * self.HT(
-            (20000 * (torch.sqrt(torch.sum((inp - self.minR) ** 2, dim=1)).reshape(
+            (2 * (1 / self.boundary_width) * (torch.sqrt(torch.sum((inp - self.minR) ** 2, dim=1)).reshape(
                 [len(inp), 1]) - self.R_radius) / self.R_radius) + 1))
 
     def inP(self, inp):
         return 1 - (1 / 2 + (1 / 2) * self.HT(
-            (20000 * (torch.sqrt(torch.sum((inp - self.minP) ** 2, dim=1)).reshape(
+            (2 * (1 / self.boundary_width) * (torch.sqrt(torch.sum((inp - self.minP) ** 2, dim=1)).reshape(
                 [len(inp), 1]) - self.P_radius) / self.P_radius) + 1))
 
     def decoded(self, inp):
@@ -91,7 +93,7 @@ class CommittorOneDecoder(torch.nn.Module):
         return torch.autograd.grad(outputs=enc.sum(), inputs=x)[0][:, :2]
 
 class CommittorTwoDecoder(torch.nn.Module):
-    def __init__(self, committor_dims, decoder_dims, dropout, pot):
+    def __init__(self, committor_dims, decoder_dims, dropout, pot, boundary_width=0.1):
         """Initialise auto encoder with hyperbolic tangent activation function
 
         :param committor_dims:  list, List of dimensions for encoder, including input/output layers
@@ -99,8 +101,10 @@ class CommittorTwoDecoder(torch.nn.Module):
         :param dropout:         int, value of the dropout probability
         :param pot:             General2DPotential, object containing information concerning the potential et the
                                 definition of the reactant and product state
+        :param boundary_width:  float, witdth of the boundary of the definition of states
         """
         super(CommittorTwoDecoder, self).__init__()
+        self.boundary_width = boundary_width
         layers = []
         for i in range(len(committor_dims) - 2):
             layers.append(torch.nn.Linear(committor_dims[i], committor_dims[i + 1]))
@@ -134,12 +138,12 @@ class CommittorTwoDecoder(torch.nn.Module):
 
     def inR(self, inp):
         return 1 - (1 / 2 + (1 / 2) * self.HT(
-            (200 * (torch.sqrt(torch.sum((inp - self.minR) ** 2, dim=1)).reshape(
+            (2 * (1 / self.boundary_width) * (torch.sqrt(torch.sum((inp - self.minR) ** 2, dim=1)).reshape(
                 [len(inp), 1]) - self.R_radius) / self.R_radius) + 1))
 
     def inP(self, inp):
         return 1 - (1 / 2 + (1 / 2) * self.HT(
-            (200 * (torch.sqrt(torch.sum((inp - self.minP) ** 2, dim=1)).reshape(
+            (2 * (1 / self.boundary_width) * (torch.sqrt(torch.sum((inp - self.minP) ** 2, dim=1)).reshape(
                 [len(inp), 1]) - self.P_radius) / self.P_radius) + 1))
 
     def committor(self, inp):
