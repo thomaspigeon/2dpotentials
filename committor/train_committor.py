@@ -1245,8 +1245,8 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
             (react_points - react_points_decoded1) ** 2,
             dim=1).detach().numpy()
         for bin_idx in range(n_bins):
-            X_given_z1[bin_idx] = react_points[x1 * (inds == bin_idx + 1), :2]
-            X_given_z2[bin_idx] = react_points[x2 * (inds == bin_idx + 1), :2]
+            X_given_z1[bin_idx] = react_points[x1 * (inds == bin_idx + 1)[:, 0], :2]
+            X_given_z2[bin_idx] = react_points[x2 * (inds == bin_idx + 1)[:, 0], :2]
             if len(X_given_z1[bin_idx]) > 0:
                 Esp_X_given_z1.append(X_given_z1[bin_idx].mean(dim=0))
                 f_dec_z1.append(self.committor_model.decoder1(self.committor_model.encoder(Esp_X_given_z1[-1])).detach().numpy())
