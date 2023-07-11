@@ -697,10 +697,12 @@ class TainAEOneDecoder(TrainAE):
         ax.plot(Esp_X_given_z[:, 0], Esp_X_given_z[:, 1], '-o', color='blue', label='cond. avg. best model')
         ax.plot(f_dec_z[:, 0], f_dec_z[:, 1], '*', color='black', label='decoder best model')
 
-    def plot_principal_curve_convergence(self, n_bins, y_scale_dist=[0, 0.025], y_scale_cosine=[0.5, 1.1], plt_title=False):
-        """Plot conditional averages computed on the full dataset to the given ax
+    def plot_principal_curve_convergence(self, ax1, ax2, n_bins, y_scale_dist=[0, 0.025], y_scale_cosine=[0.5, 1.1], plt_title=False):
+        """Plot conditional averages computed on the full dataset to the given axes
 
         :param n_bins:          int, number of bins to compute conditional averages
+        :param ax1:             Instance of matplotlib.axes.Axes
+        :param ax2:             Instance of matplotlib.axes.Axes
         """
         grads_enc = []
         grads_dec = []
@@ -734,18 +736,16 @@ class TainAEOneDecoder(TrainAE):
             (np.sum(grads_enc ** 2, axis=1) * np.sum(grads_dec ** 2, axis=1)))
         dist_fec_exp = np.sum(
             (np.array(Esp_X_given_z) - np.array(f_dec_z)) ** 2, axis=1)
-        plt.figure()
-        plt.plot(z_values, cos_angles)
-        plt.plot(z_values, np.ones(len(z_values)), linestyle='dashed', color='black', linewidth=0.5)
-        plt.ylim(y_scale_cosine[0], y_scale_cosine[1])
+
+        ax1.plot(np.arange(len(z_values))/len(z_values), cos_angles)
+        ax1.plot(np.arange(len(z_values))/len(z_values), np.ones(len(z_values)), linestyle='dashed', color='black', linewidth=0.5)
+        ax1.set_ylim(y_scale_cosine[0], y_scale_cosine[1])
         if plt_title:
-            plt.title('cosine of angle between the gradient of the encoder \n at the cdt. avg. and the derivative of the decoder')
-        plt.show()
-        plt.figure()
-        plt.plot(z_values, dist_fec_exp)
-        plt.ylim(y_scale_dist[0], y_scale_dist[1])
+            ax1.set_title('cosine of angle between the gradient of the encoder \n at the cdt. avg. and the derivative of the decoder')
+        ax2.plot(np.arange(len(z_values))/len(z_values), dist_fec_exp)
+        ax2.set_ylim(y_scale_dist[0], y_scale_dist[1])
         if plt_title:
-            plt.title('distance between the decoder and the conditional average')
+            ax2.set_title('distance between the decoder and the conditional average')
         plt.show()
 
 
@@ -1114,10 +1114,12 @@ class TainAETwoDecoder(TrainAE):
         ax.plot(f_dec_z1[:, 0], f_dec_z1[:, 1], '*', color='black', label='decoder 1')
         ax.plot(f_dec_z2[:, 0], f_dec_z2[:, 1], '*', color='pink', label='decoder 2')
 
-    def plot_principal_curve_convergence(self, n_bins,  y_scale_dist=[0, 0.025], y_scale_cosine=[0.5, 1.1], plt_title=False):
+    def plot_principal_curve_convergence(self, ax1, ax2, n_bins,  y_scale_dist=[0, 0.025], y_scale_cosine=[0.5, 1.1], plt_title=False):
         """Plot conditional averages computed on the full dataset to the given ax
 
         :param n_bins:          int, number of bins to compute conditional averages
+        :param ax1:             Instance of matplotlib.axes.Axes
+        :param ax2:             Instance of matplotlib.axes.Axes
         """
         grads_enc1 = []
         grads_dec1 = []
@@ -1185,25 +1187,22 @@ class TainAETwoDecoder(TrainAE):
             (np.sum(grads_enc2 ** 2, axis=1) * np.sum(grads_dec2 ** 2, axis=1)))
         dist_dec_exp2 = np.sum(
             (np.array(Esp_X_given_z2) - np.array(f_dec_z2)) ** 2, axis=1)
-        plt.figure()
         if plt_title:
-            plt.title("""cosine of angle between the gradient of the encoder at the \n 
+            ax1.set_title("""cosine of angle between the gradient of the encoder at the \n 
                  cdt. avg. and the derivative of the n-th decoder""")
-        plt.plot(z_values1, cos_angles1,
+        ax1.plot(np.arange(len(z_values1))/len(z_values1), cos_angles1,
                  label="""decoder 1""")
-        plt.plot(z_values2, cos_angles2,
+        ax1.plot(np.arange(len(z_values2))/len(z_values2), cos_angles2,
                  label="""decoder 2""")
-        plt.plot(z_values1, np.ones(len(z_values1)), linestyle='dashed', color='black', linewidth=0.5)
-        plt.ylim(y_scale_cosine[0], y_scale_cosine[1])
-        plt.legend()
-        plt.show()
-        plt.figure()
+        ax1.plot(np.arange(len(z_values1))/len(z_values1), np.ones(len(z_values1)), linestyle='dashed', color='black', linewidth=0.5)
+        ax1.set_ylim(y_scale_cosine[0], y_scale_cosine[1])
+
         if plt_title:
-            plt.title("""Distance between the n-th decoder and the n-th cdt. avg.""")
-        plt.plot(z_values1, dist_dec_exp1,
+            ax2.set_title("""Distance between the n-th decoder and the n-th cdt. avg.""")
+        ax2.plot(np.arange(len(z_values1))/len(z_values1), dist_dec_exp1,
                  label='decoder 1')
-        plt.plot(z_values2, dist_dec_exp2,
+        ax2.plot(np.arange(len(z_values2))/len(z_values2), dist_dec_exp2,
                  label='decoder 2')
-        plt.ylim(y_scale_dist[0], y_scale_dist[1])
+        ax2.set_ylim(y_scale_dist[0], y_scale_dist[1])
         plt.legend()
         plt.show()
