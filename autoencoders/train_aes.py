@@ -648,7 +648,7 @@ class TainAEOneDecoder(TrainAE):
         if "react_points" in self.dataset.keys():
             print("""Test MSE reactive: """, mse_react)
 
-    def plot_conditional_averages(self, ax, n_bins, set_lim=False, with_react_dens=False):
+    def plot_conditional_averages(self, ax, n_bins, set_lim=False, with_react_dens=False, z_minmax=None):
         """Plot conditional averages computed on the full dataset to the given ax
 
         :param ax:              Instance of matplotlib.axes.Axes
@@ -656,8 +656,11 @@ class TainAEOneDecoder(TrainAE):
         :param set_lim:         boolean, whether the limits of the x and y axes should be set.
         :param with_react_dens: boolean, whether the ocnditional averages are computed with the reactive density or the
                                 boltzmann gibbs distribution
+        :param z_minmax         list, of two floats corresponding to the min and the max for the bins.
 
-        :return bin_population: list of ints, len==n_bins, population of each bin
+        :return z_bin           np.array, dim=1, shape= nbins, uniformly spaced bins (left boundary)
+        :return Esp_X_given_z1: np.array, dim=2, shape=(n_bins, 2), the conditional averages given that decoder 1 has
+                                lowest reconstruction error
         """
         X_given_z = [[] for i in range(n_bins)]
         Esp_X_given_z = []
@@ -667,7 +670,10 @@ class TainAEOneDecoder(TrainAE):
         else:
             xi_values = self.ae.xi_ae(self.dataset["boltz_points"])[:, 0]
         # equal-width bins
-        z_bin = np.linspace(xi_values.min(), xi_values.max(), n_bins)
+        if z_minmax == None:
+            z_bin = np.linspace(xi_values.min(), xi_values.max(), n_bins)
+        else:
+            z_bin = np.linspace(z_minmax[0], z_minmax[1], n_bins)
         # compute index of bin
         inds = np.digitize(xi_values, z_bin)
         # distribute train data to each bin
@@ -696,6 +702,7 @@ class TainAEOneDecoder(TrainAE):
             ax.set_xlim(self.pot.x_domain[0], self.pot.x_domain[1])
         ax.plot(Esp_X_given_z[:, 0], Esp_X_given_z[:, 1], '-o', color='blue', label='cond. avg. best model')
         ax.plot(f_dec_z[:, 0], f_dec_z[:, 1], '*', color='black', label='decoder best model')
+        return z_bin, Esp_X_given_z
 
     def plot_principal_curve_convergence(self, ax1, ax2, n_bins, y_scale_dist=[0, 0.025], y_scale_cosine=[0.5, 1.1], plt_title=False):
         """Plot conditional averages computed on the full dataset to the given axes
@@ -1038,13 +1045,21 @@ class TainAETwoDecoder(TrainAE):
         if "react_points" in self.dataset.keys():
             print("""Test MSE reactive: """, mse_react)
 
-    def plot_conditional_averages(self, ax, n_bins, set_lim=False, with_react_dens=False):
+    def plot_conditional_averages(self, ax, n_bins, set_lim=False, with_react_dens=False, z_minmax=None):
         """Plot conditional averages computed on the full dataset to the given ax
 
         :param ax:              Instance of matplotlib.axes.Axes
         :param n_bins:          int, number of bins to compute conditional averages
         :param set_lim:         boolean, whether the limits of the x and y axes should be set.
-        :return bin_population: list of ints, len==n_bins, population of each bin
+        :param with_react_dens: boolean, whether the ocnditional averages are computed with the reactive density or the
+                                boltzmann gibbs distribution
+        :param z_minmax         list, of two floats corresponding to the min and the max for the bins.
+
+        :return z_bin           np.array, dim=1, shape= nbins, uniformly spaced bins (left boundary)
+        :return Esp_X_given_z1: np.array, dim=2, shape=(n_bins, 2), the conditional averages given that decoder 1 has
+                                lowest reconstruction error
+        :return Esp_X_given_z2: np.array, dim=2, shape=(n_bins, 2), the conditional averages given that decoder 2 has
+                                lowest reconstruction error
         """
         X_given_z1 = [[] for i in range(n_bins)]
         X_given_z2 = [[] for i in range(n_bins)]
@@ -1060,7 +1075,10 @@ class TainAETwoDecoder(TrainAE):
         boltz_points_decoded2 = self.ae.decoder2(self.ae.encoder(boltz_points))
         xi_values = self.ae.xi_ae(self.dataset["boltz_points"])[:, 0]
         # equal-width bins
-        z_bin = np.linspace(xi_values.min(), xi_values.max(), n_bins)
+        if z_minmax == None:
+            z_bin = np.linspace(xi_values.min(), xi_values.max(), n_bins)
+        else:
+            z_bin = np.linspace(z_minmax[0], z_minmax[1], n_bins)
         # compute index of bin
         inds = np.digitize(xi_values, z_bin)
         # distribute train data to each bin
@@ -1113,6 +1131,8 @@ class TainAETwoDecoder(TrainAE):
                    alpha=0.2)
         ax.plot(f_dec_z1[:, 0], f_dec_z1[:, 1], '*', color='black', label='decoder 1')
         ax.plot(f_dec_z2[:, 0], f_dec_z2[:, 1], '*', color='pink', label='decoder 2')
+        return z_bin, Esp_X_given_z1, Esp_X_given_z2
+
 
     def plot_principal_curve_convergence(self, ax1, ax2, n_bins,  y_scale_dist=[0, 0.025], y_scale_cosine=[0.5, 1.1], plt_title=False):
         """Plot conditional averages computed on the full dataset to the given ax
