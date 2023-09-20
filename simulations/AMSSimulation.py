@@ -953,8 +953,8 @@ class AMSLangevin(Langevin):
                     x_traj.append(x)
                     p_traj.append(p)
                     md_steps += 1
-                    if self.xi(x) > z_maxs[i]:
-                        z_maxs[i] = self.xi(x)
+                    if self.xi(x,p) > z_maxs[i]:
+                        z_maxs[i] = self.xi(x,p)
                 reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
                 reps[i]["p_traj"] = np.array(p_traj).sum(axis=1)
                 if self.in_P(x):
