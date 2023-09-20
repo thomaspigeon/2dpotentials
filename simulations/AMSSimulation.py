@@ -953,8 +953,8 @@ class AMSLangevin(Langevin):
                     x_traj.append(x)
                     p_traj.append(p)
                     md_steps += 1
-                    if self.xi(x,p) > z_maxs[i]:
-                        z_maxs[i] = self.xi(x,p)
+                    if self.xi(x, p) > reps[i]["z_max"]:
+                        reps[i]["z_max"] = self.xi(x, p)
                 reps[i]["x_traj"] = np.array(x_traj).sum(axis=1)
                 reps[i]["p_traj"] = np.array(p_traj).sum(axis=1)
                 if self.in_P(x):
@@ -1096,7 +1096,7 @@ class AMSLangevin(Langevin):
         :return p:          float, estimated probability of reaching P before R starting from the initial conditions
         :return z_kills:    list of float, all the various values of z_kill
         :return replicas:   lists of dicts, len== number of ams iteration + 1, each dict is a replica containing
-                            the key "x_traj", "ptraj", "grad_traj" if save_grad, "gauss_traj" if save_gauss, "z_max",
+                            the key "x_traj", "p_traj", "grad_traj" if save_grad, "gauss_traj" if save_gauss, "z_max",
                             "in_P" and "weight".
         :return md_steps:   int, number of steps of dynamics
         """
