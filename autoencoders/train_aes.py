@@ -1124,10 +1124,10 @@ class TainAETwoDecoder(TrainAE):
         ax.plot(Esp_X_given_z1[:, 0], Esp_X_given_z1[:, 1], '-o', color='midnightblue', label='cond. avg. decoder 1')
         ax.plot(Esp_X_given_z2[:, 0], Esp_X_given_z2[:, 1], '-o', color='brown', label='cond. avg. decoder 2')
         ax.scatter(self.dataset["boltz_points"][x1][:, 0],
-                   self.dataset["boltz_points"][x1][:, 1], color='blue', label='decoder1', s=1,
+                   self.dataset["boltz_points"][x1][:, 1], color='blue', label='cluster 1', s=1,
                    alpha=0.2)
         ax.scatter(self.dataset["boltz_points"][x2][:, 0],
-                   self.dataset["boltz_points"][x2][:, 1], color='purple', label='decoder2', s=1,
+                   self.dataset["boltz_points"][x2][:, 1], color='purple', label='cluster 2', s=1,
                    alpha=0.2)
         ax.plot(f_dec_z1[:, 0], f_dec_z1[:, 1], '*', color='black', label='decoder 1')
         ax.plot(f_dec_z2[:, 0], f_dec_z2[:, 1], '*', color='pink', label='decoder 2')
