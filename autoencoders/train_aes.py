@@ -386,7 +386,7 @@ class TrainAE:
         ax.contour(self.pot.x_plot, self.pot.y_plot, ae_on_grid, n_lines, cmap='viridis')
 
 
-class TainAEOneDecoder(TrainAE):
+class TrainAEOneDecoder(TrainAE):
     """Class to train AE models with one decoder
 
     The dataset is the described in the __init__. It is first split into a training dataset and a test dataset. This
@@ -758,7 +758,7 @@ class TainAEOneDecoder(TrainAE):
         plt.show()
 
 
-class TainAETwoDecoder(TrainAE):
+class TrainAETwoDecoder(TrainAE):
     """Class to train AE models with one decoder
 
     The dataset is the described in the __init__. It is first split into a training dataset and a test dataset. This
