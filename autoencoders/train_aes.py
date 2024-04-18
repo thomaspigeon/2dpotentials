@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split as ttsplit
 from sklearn.model_selection import KFold
 from sklearn.preprocessing import StandardScaler
+import matplotlib.colors as mcolors
+
 
 
 class TrainAE:
@@ -1133,8 +1135,8 @@ class TainAETwoDecoder(TrainAE):
         ax.plot(f_dec_z2[:, 0], f_dec_z2[:, 1], '*', color='pink', label='decoder 2')
         return z_bin, Esp_X_given_z1, Esp_X_given_z2
 
-
-    def plot_principal_curve_convergence(self, ax1, ax2, n_bins,  y_scale_dist=[0, 0.025], y_scale_cosine=[0.5, 1.1], plt_title=False):
+    def plot_principal_curve_convergence(self, ax1, ax2, n_bins,  y_scale_dist=[0, 0.025], y_scale_cosine=[0.5, 1.1],
+                                         plt_title=False):
         """Plot conditional averages computed on the full dataset to the given ax
 
         :param n_bins:          int, number of bins to compute conditional averages
@@ -1226,3 +1228,404 @@ class TainAETwoDecoder(TrainAE):
         ax2.set_ylim(y_scale_dist[0], y_scale_dist[1])
         plt.legend()
         plt.show()
+
+
+class TrainAEMultipleDecoders(TrainAE):
+    """Class to train AE models with one decoder
+
+     The dataset is the described in the __init__. It is first split into a training dataset and a test dataset. This
+     last one is not used at all for validation of hyperparameters. It is used to computed conditional averages and
+     other quantities to charaterize the convergence of the training. The training dataset has to be split into K  folds
+     to generate the validation and test data.
+     """
+
+    def __init__(self, ae, pot, dataset, penalization_points=None, standardize=False, zca_whiten=False):
+        """
+
+        :param ae:                  AE model from autoencoders.ae_models.DeepAutoEncoder
+        :param pot:                 two-dimensional potential object from potentials
+        :param dataset:             dict, with dataset["boltz_points"] a np.array with ndim==2, shape==[any, 2] an array
+                                    of points on the 2D potentials distributed according ot the boltzmann gibbs measure.
+                                    Optionally,  dataset["boltz_weights"] is a np.array with ndim==2, shape==[any, 1],
+                                    if not provided the weights are set to 1. Another option is dataset["react_points"],
+                                    np.array with ndim==2, shape==[any, 2] an array  of points on the 2D potentials
+                                    distributed according ot the probability measure of reactive trajectories.
+                                    dataset["react_weights"] can be set as well, set to 1 if not provided
+        :param penalization_points: np.array, ndim==2, shape=[any, 3], penalization_point[:, :2] are the points on which
+                                    the encoder is penalized if its values on these points differ from
+                                    penalization_point[:, 2]
+        :param standardize:         boolean, whether the points should be rescaled so that the average in every
+                                    direction is zero and has variance equal to 1
+        :param zca_whiten:          boolean, whether the data should be whitened using mahalanobis whitening
+        """
+        super().__init__(ae,
+                         pot,
+                         dataset,
+                         penalization_points=penalization_points,
+                         standardize=standardize,
+                         zca_whiten=zca_whiten)
+        self.optimizer = None
+
+    def set_optimizer(self, opt, learning_rate, parameters_to_train='all'):
+        """
+
+        :param opt:                 str, either 'SGD' or 'Adam' to use the corresponding pytorch optimizer.
+        :param learning_rate:       float, value of the learning rate, typically 10**(-3) or smaller gives good results
+                                    on the tested potentials
+        :param parameters_to_train: str, either 'encoder', 'decoders',  or 'all' to set what are the trained parameters
+        """
+        if opt == 'Adam' and parameters_to_train == 'all':
+            self.optimizer = torch.optim.Adam([{'params': self.ae.parameters()}], lr=learning_rate)
+        elif opt == 'SGD' and parameters_to_train == 'all':
+            self.optimizer = torch.optim.SGD([{'params': self.ae.parameters()}], lr=learning_rate)
+        elif opt == 'Adam' and parameters_to_train == 'encoder':
+            self.optimizer = torch.optim.Adam([{'params': self.ae.encoder.parameters()}], lr=learning_rate)
+        elif opt == 'SGD' and parameters_to_train == 'encoder':
+            self.optimizer = torch.optim.SGD([{'params': self.ae.encoder.parameters()}], lr=learning_rate)
+        elif opt == 'Adam' and parameters_to_train == 'decoders':
+            self.optimizer = torch.optim.Adam(
+                [{'params': self.ae.decoders[i].parameters()} for i in range(len(self.ae.decoders))], lr=learning_rate)
+        elif opt == 'SGD' and parameters_to_train == 'decoders':
+            self.optimizer = torch.optim.SGD(
+                [{'params': self.ae.decoders[i].parameters()} for i in range(len(self.ae.decoders))], lr=learning_rate)
+        else:
+            raise ValueError("""The parameters opt and parameters_to_train must be specific str, see docstring""")
+
+    @staticmethod
+    def mse_loss_boltz(inp, decs):
+        """MSE term on points distributed according to Boltzmann-Gibbs measure.
+
+        :param inp:     torch.tensor, ndim==2, shape==[any, 3] or shape==[any, 6], inp[:, :2] is the input of the
+                        auto-encoder distributed according to Bolzmann-Gibbs measure and inp[:, 2] are the corresponding
+                        weights, inp[:, 3:] are not used
+        :param decs:    list of torch.tensor, ndim==2, shape==[any, 2], output of the auto-encoder corresponding to the
+                        described inp for each decoders
+        :return mse:    torch float, mean squared error between input and output for points distributed according to
+                        Boltzmann-Gibbs measure for each decoders
+        """
+        return torch.mean(
+            inp[:, 2] * torch.min(torch.stack([torch.sum((inp[:, 0:2] - dec) ** 2, dim=1) for dec in decs]), dim=0))
+
+    @staticmethod
+    def mse_loss_react(inp, decs):
+        """MSE term on points distributed according to reactive trajectories measure.
+
+        :param inp:     torch.tensor, ndim==2, shape==[any, 6], inp[:, 3:5] is the input of the
+                        auto-encoder distributed according to reactive trajectories measure and inp[:, 5] are the
+                        corresponding weights, inp[:, :3] are not used
+        :param decs:    list of torch.tensor, ndim==2, shape==[any, 2], output of the auto-encoder corresponding to the
+                        described inp for each decoders
+        :return mse:    torch float, mean squared error between input and output for points distributed according to
+                        Boltzmann-Gibbs measure.
+        """
+        return torch.mean(
+            inp[:, 5] * torch.min(torch.stack([torch.sum((inp[:, 3:5] - dec) ** 2, dim=1) for dec in decs]), dim=0))
+
+    def pen_points_mse(self):
+        """MSE term for penalization points
+
+        :return:   torch float, mean squarred error between input en output on penalization points
+        """
+        return torch.mean(torch.stack([torch.sum((self.penalization_point[:, 0:2] - dec(
+                self.ae.encoder(self.penalization_point[:, :2]))) ** 2, dim=1) for dec in self.ae.decoders]), dim=0)
+
+    def train(self, batch_size, max_epochs):
+        """ Do the training of the model self.ae
+
+        :param batch_size:      int >= 1, batch size for the mini-batching
+        :param max_epochs:      int >= 1, maximal number of epoch of training
+        :return loss_dict:      dict, contains the average loss for each epoch and its various components.
+        """
+        if self.optimizer is None:
+            print("""The optimizer has not been set, see set_optimizer method. It is set to use 'Adam' optimizer \n 
+                      with a 0.001 learning rate and optimize all the parameters of the model""")
+            self.set_optimizer('Adam', 0.001)
+        # prepare the various loss list to store
+        loss_dict = {"train_loss": [], "test_loss": [], "train_mse_boltz": [], "test_mse_boltz": [],
+                     "train_squared_grad_enc_blotz": [], "test_squared_grad_enc_blotz": []}
+        if "react_points" in self.dataset.keys():
+            loss_dict["train_mse_react"] = []
+            loss_dict["test_mse_react"] = []
+        train_loader = torch.utils.data.DataLoader(dataset=self.train_data, batch_size=batch_size, shuffle=True)
+        test_loader = torch.utils.data.DataLoader(dataset=self.validation_data, batch_size=batch_size, shuffle=True)
+        epoch = 0
+        model = copy.deepcopy(self.ae)
+        while epoch < max_epochs:
+            loss_dict["train_loss"].append([])
+            loss_dict["train_mse_boltz"].append([])
+            loss_dict["train_squared_grad_enc_blotz"].append([])
+            if "react_points" in self.dataset.keys():
+                loss_dict["train_mse_react"].append([])
+            # train mode
+            self.ae.train()
+            for iteration, X in enumerate(train_loader):
+                # Set gradient calculation capabilities
+                X.requires_grad_()
+                # Set the gradient of with respect to parameters to zero
+                self.optimizer.zero_grad()
+                # Forward pass for boltzmann gibbs distributed points
+                enc = self.ae.encoder(X[:, :2])
+                decs = [dec(enc) for dec in self.ae.decoders]
+                # Compute the various loss terms
+                mse_blotz = self.mse_loss_boltz(X, decs)
+                squared_grad_enc = self.squared_grad_encoder_penalization(X, enc)
+                l1_pen = self.l1_penalization(self.ae)
+                l2_pen = self.l2_penalization(self.ae)
+                var_enc = self.var_encoder()
+                loss = self.mse_boltz_weight * mse_blotz + \
+                       self.var_enc_weight * var_enc + \
+                       self.squared_grad_boltz_weight * squared_grad_enc + \
+                       self.l1_pen_weight * l1_pen + \
+                       self.l2_pen_weight * l2_pen + \
+                       self.pen_points_weight * self.penalization_on_points() + \
+                       self.pen_points_mse_weight * self.pen_points_mse()
+                if "react_points" in self.dataset.keys():
+                    # Forward pass for reactive trajectories
+                    enc_reac = self.ae.encoder(X[:, 3:5])
+                    decs_reac = [dec(enc_reac) for dec in self.ae.decoders]
+                    mse_react = self.mse_loss_react(X, decs_reac)
+                    loss += self.mse_react_weight * mse_react
+                if self.var_dist_dec_weight > 0.:
+                    enc_min = torch.min(self.ae.encoder(self.train_data[:, :2])).detach()
+                    enc_max = torch.max(self.ae.encoder(self.train_data[:, :2])).detach()
+                    z_grid = torch.linspace(enc_min, enc_max, self.n_bins_var_dist_dec)
+                    for dec in self.ae.decoders:
+                        loss += self.var_dist_dec_weight * self.dist_dec_penalization(dec(z_grid))
+                loss.backward()
+                self.optimizer.step()
+                loss_dict["train_loss"][epoch].append(loss.detach().numpy())
+                loss_dict["train_mse_boltz"][epoch].append(mse_blotz.detach().numpy())
+                loss_dict["train_squared_grad_enc_blotz"][epoch].append(squared_grad_enc.detach().numpy())
+                if "react_points" in self.dataset.keys():
+                    loss_dict["train_mse_react"][epoch].append(mse_react.detach().numpy())
+            loss_dict["train_loss"][epoch] = np.mean(loss_dict["train_loss"][epoch])
+            loss_dict["train_mse_boltz"][epoch] = np.mean(loss_dict["train_mse_boltz"][epoch])
+            loss_dict["train_squared_grad_enc_blotz"][epoch] = np.mean(loss_dict["train_squared_grad_enc_blotz"][epoch])
+            if "react_points" in self.dataset.keys():
+                loss_dict["train_mse_react"][epoch] = np.mean(loss_dict["train_mse_react"][epoch])
+
+            loss_dict["test_loss"].append([])
+            loss_dict["test_mse_boltz"].append([])
+            loss_dict["test_squared_grad_enc_blotz"].append([])
+            if "react_points" in self.dataset.keys():
+                loss_dict["test_mse_react"].append([])
+            # test mode
+            self.ae.eval()
+            for iteration, X in enumerate(test_loader):
+                # Set gradient calculation capabilities
+                X.requires_grad_()
+                # Forward pass for boltzmann gibbs distributed points
+                enc = self.ae.encoder(X[:, :2])
+                decs = [dec(enc) for dec in self.ae.decoders]
+                # Compute the various loss terms
+                mse_blotz = self.mse_loss_boltz(X, decs)
+                squared_grad_enc = self.squared_grad_encoder_penalization(X, enc)
+                l1_pen = self.l1_penalization(self.ae)
+                l2_pen = self.l2_penalization(self.ae)
+                var_enc = self.var_encoder()
+                loss = self.mse_boltz_weight * mse_blotz + \
+                       self.var_enc_weight * var_enc + \
+                       self.squared_grad_boltz_weight * squared_grad_enc + \
+                       self.l1_pen_weight * l1_pen + \
+                       self.l2_pen_weight * l2_pen + \
+                       self.pen_points_weight * self.penalization_on_points() + \
+                       self.pen_points_mse_weight * self.pen_points_mse()
+                if "react_points" in self.dataset.keys():
+                    # Forward pass for reactive trajectories
+                    enc_reac = self.ae.encoder(X[:, 3:5])
+                    decs_reac = [dec(enc_reac) for dec in self.ae.decoders]
+                    mse_react = self.mse_loss_react(X, decs_reac)
+                    loss += self.mse_react_weight * mse_react
+                if self.var_dist_dec_weight > 0.:
+                    enc_min = torch.min(self.ae.encoder(self.train_data[:, :2])).detach()
+                    enc_max = torch.max(self.ae.encoder(self.train_data[:, :2])).detach()
+                    z_grid = torch.linspace(enc_min, enc_max, self.n_bins_var_dist_dec)
+                    for dec in self.ae.decoders:
+                        loss += self.var_dist_dec_weight * self.dist_dec_penalization(dec(z_grid))
+                loss_dict["test_loss"][epoch].append(loss.detach().numpy())
+                loss_dict["test_mse_boltz"][epoch].append(mse_blotz.detach().numpy())
+                loss_dict["test_squared_grad_enc_blotz"][epoch].append(squared_grad_enc.detach().numpy())
+                if "react_points" in self.dataset.keys():
+                    loss_dict["test_mse_react"][epoch].append(mse_react.detach().numpy())
+            loss_dict["test_loss"][epoch] = np.mean(loss_dict["test_loss"][epoch])
+            loss_dict["test_mse_boltz"][epoch] = np.mean(loss_dict["test_mse_boltz"][epoch])
+            loss_dict["test_squared_grad_enc_blotz"][epoch] = np.mean(loss_dict["test_squared_grad_enc_blotz"][epoch])
+            if "react_points" in self.dataset.keys():
+                loss_dict["test_mse_react"][epoch] = np.mean(loss_dict["test_mse_react"][epoch])
+            # Early stopping
+            if loss_dict["test_loss"][epoch] == np.min(loss_dict["test_loss"]):
+                model = copy.deepcopy(self.ae)
+            if epoch >= self.n_wait:
+                if np.min(loss_dict["test_loss"]) < np.min(loss_dict["test_loss"][- self.n_wait:]):
+                    epoch = max_epochs
+                    self.ae = model
+            epoch += 1
+        print("training ends after " + str(len(loss_dict["test_loss"])) + " epochs.\n")
+        return loss_dict
+
+    def print_test_loss(self):
+        """Print the test loss and its various components"""
+        X = self.test_dataset
+        X.requires_grad_()
+        enc = self.ae.encoder(X[:, :2])
+        decs = [dec(enc) for dec in self.ae.decoders]
+        # Compute the various loss terms
+        mse_blotz = self.mse_loss_boltz(X, decs)
+        squared_grad_enc = self.squared_grad_encoder_penalization(X, enc)
+        l1_pen = self.l1_penalization(self.ae)
+        l2_pen = self.l2_penalization(self.ae)
+        var_enc = self.var_encoder()
+        loss = self.mse_boltz_weight * mse_blotz + \
+               self.var_enc_weight * var_enc + \
+               self.squared_grad_boltz_weight * squared_grad_enc + \
+               self.l1_pen_weight * l1_pen + \
+               self.l2_pen_weight * l2_pen + \
+               self.pen_points_weight * self.penalization_on_points() + \
+               self.pen_points_mse_weight * self.pen_points_mse()
+        if "react_points" in self.dataset.keys():
+            # Forward pass for reactive trajectories
+            enc_reac = self.ae.encoder(X[:, 3:5])
+            decs_reac = [dec(enc_reac) for dec in self.ae.decoders]
+            mse_react = self.mse_loss_react(X, decs_reac)
+            loss += self.mse_react_weight * mse_react
+        if self.var_dist_dec_weight > 0.:
+            enc_min = torch.min(self.ae.encoder(X[:, :2])).detach()
+            enc_max = torch.max(self.ae.encoder(X[:, :2])).detach()
+            z_grid = torch.linspace(enc_min, enc_max, self.n_bins_var_dist_dec)
+            for dec in self.ae.decoders:
+                loss += self.var_dist_dec_weight * self.dist_dec_penalization(dec(z_grid))
+        print("""Test loss: """, loss)
+        print("""Test MSE Boltzmann: """, mse_blotz)
+        print("""Test squarred grad encoder: """, squared_grad_enc)
+        if "react_points" in self.dataset.keys():
+            print("""Test MSE reactive: """, mse_react)
+
+    def plot_conditional_averages(self, ax, n_bins, set_lim=False, with_react_dens=False, z_minmax=None):
+        """Plot conditional averages computed on the full dataset to the given ax
+
+        :param ax:              Instance of matplotlib.axes.Axes
+        :param n_bins:          int, number of bins to compute conditional averages
+        :param set_lim:         boolean, whether the limits of the x and y axes should be set.
+        :param with_react_dens: boolean, whether the ocnditional averages are computed with the reactive density or the
+                                boltzmann gibbs distribution
+        :param z_minmax         list, of two floats corresponding to the min and the max for the bins.
+
+        :return z_bin           np.array, dim=1, shape= nbins, uniformly spaced bins (left boundary)
+        :return Esp_X_given_z1: np.array, dim=2, shape=(n_bins, 2), the conditional averages given that decoder 1 has
+                                lowest reconstruction error
+        :return Esp_X_given_z2: np.array, dim=2, shape=(n_bins, 2), the conditional averages given that decoder 2 has
+                                lowest reconstruction error
+        """
+        X_given_z = [[[] for i in range(n_bins)] for dec in self.ae.decoders]
+        Esp_X_given_z = [[] for dec in self.ae.decoders]
+        f_dec_z = [[] for dec in self.ae.decoders]
+        if with_react_dens:
+            boltz_points = torch.tensor(self.dataset["react_points"].astype('float32'))
+        else:
+            boltz_points = torch.tensor(self.dataset["boltz_points"].astype('float32'))
+        boltz_points_decoded = torch.stack([dec(self.ae.encoder(boltz_points)) for dec in self.ae.decoders])
+        error = torch.sum((boltz_points_decoded - boltz_points)**2, dim=2).detach().numpy()
+        where = error <= np.min(error, axis=0)
+        xi_values = self.ae.xi_ae(self.dataset["boltz_points"])[:, 0]
+        # equal-width bins
+        if z_minmax == None:
+            z_bin = np.linspace(xi_values.min(), xi_values.max(), n_bins)
+        else:
+            z_bin = np.linspace(z_minmax[0], z_minmax[1], n_bins)
+        # compute index of bin
+        inds = np.digitize(xi_values, z_bin)
+        # distribute train data to each bin
+        for bin_idx in range(n_bins):
+            for i in range(len(self.ae.decoders)):
+                if with_react_dens:
+                    X_given_z[i][bin_idx] = self.dataset["react_points"][where[i] * (inds == bin_idx + 1), :2]
+                else:
+                    X_given_z[i][bin_idx] = self.dataset["boltz_points"][where[i] * (inds == bin_idx + 1), :2]
+                if len(X_given_z[i][bin_idx]) > 0:
+                    Esp_X_given_z[i].append(torch.tensor(X_given_z[i][bin_idx].astype('float32')).mean(dim=0))
+                    f_dec_z[i].append(self.ae.decoders[i](self.ae.encoder(Esp_X_given_z[i][-1])).detach().numpy())
+                    Esp_X_given_z[i][-1] = Esp_X_given_z[i][-1].detach().numpy()
+            if self.standardize:
+                Esp_X_given_z[i] = self.scaler.inverse_transform(np.array(Esp_X_given_z[i]))
+                f_dec_z[i] = self.scaler.inverse_transform(np.array(f_dec_z[i]))
+            elif self.zca_whiten:
+                Esp_X_given_z[i] = np.linalg.inv(self.ZCAMatrix).dot(np.array(Esp_X_given_z[i]).T).T
+                f_dec_z[i] = np.linalg.inv(self.ZCAMatrix).dot(np.array(f_dec_z[i]).T).T
+            else:
+                Esp_X_given_z[i] = np.array(Esp_X_given_z[i])
+                f_dec_z[i] = np.array(f_dec_z[i])
+        if set_lim:
+            ax.set_ylim(self.pot.y_domain[0], self.pot.y_domain[1])
+            ax.set_xlim(self.pot.x_domain[0], self.pot.x_domain[1])
+        for i in range(len(self.ae.decoders)):
+            ax.plot(Esp_X_given_z[i][:, 0], Esp_X_given_z[i][:, 1], '-o', color='black', label='cond. avg. decoder '+str(i))
+            ax.scatter(self.dataset["boltz_points"][where[i]][:, 0],
+                       self.dataset["boltz_points"][where[i]][:, 1], color=mcolors.TABLEAU_COLORS[i], label='cluster '+str(i), s=1,
+                   alpha=0.2)
+            ax.plot(f_dec_z[i][:, 0], f_dec_z[i][:, 1], '*', color='black', label='decoder '+str(i))
+        return z_bin, Esp_X_given_z, f_dec_z
+
+    def plot_principal_curve_convergence(self, ax1, ax2, n_bins, y_scale_dist=[0, 0.025], y_scale_cosine=[0.5, 1.1],
+                                         plt_title=False):
+        """Plot conditional averages computed on the full dataset to the given ax
+
+        :param n_bins:          int, number of bins to compute conditional averages
+        :param ax1:             Instance of matplotlib.axes.Axes
+        :param ax2:             Instance of matplotlib.axes.Axes
+        """
+        grads_enc = [[] for dec in self.ae.decoders]
+        grads_dec = [[] for dec in self.ae.decoders]
+        z_values = [[] for dec in self.ae.decoders]
+        X_given_z = [[[] for i in range(n_bins)] for dec in self.ae.decoders]
+        Esp_X_given_z = [[] for dec in self.ae.decoders]
+        f_dec_z = [[] for dec in self.ae.decoders]
+
+        boltz_points = torch.tensor(self.dataset["boltz_points"].astype('float32'))
+        boltz_points_decoded = torch.stack([dec(self.ae.encoder(boltz_points)) for dec in self.ae.decoders])
+        error = torch.sum((boltz_points_decoded - boltz_points) ** 2, dim=2).detach().numpy()
+        where = error <= np.min(error, axis=0)
+        xi_values = self.ae.xi_ae(self.dataset["boltz_points"])[:, 0]
+        # equal-width bins
+        z_bin = np.linspace(xi_values.min(), xi_values.max(), n_bins)
+        # compute index of bin
+        inds = np.digitize(xi_values, z_bin)
+        # distribute train data to each bin
+        for bin_idx in range(n_bins):
+            for i in range(len(self.ae.decoders)):
+                X_given_z[i][bin_idx] = self.dataset["boltz_points"][where[i] * (inds == bin_idx + 1), :2]
+                if len(X_given_z[i][bin_idx]) > 0:
+                    Esp_X_given_z[i].append(torch.tensor(X_given_z[i][bin_idx].astype('float32')).mean(dim=0))
+                    f_dec_z[i].append(self.ae.decoders[i](self.ae.encoder(Esp_X_given_z[i][-1])).detach().numpy())
+                    Esp_X_given_z[i][-1].requires_grad_()
+                    z = self.ae.encoder(Esp_X_given_z[i][-1])
+                    z_values[i].append(z.detach().numpy())
+                    grad_f_enc = torch.autograd.grad(z, Esp_X_given_z[i][-1])[0]
+                    grads_enc[i].append(grad_f_enc.detach().numpy())
+                    z.requires_grad_()
+                    grad_f_dec = torch.autograd.functional.jacobian(self.ae.decoders[i], z, create_graph=False).sum(
+                        dim=1)
+                    grads_dec[i].append(grad_f_dec.detach().numpy())
+                    Esp_X_given_z[i][-1] = Esp_X_given_z[i][-1].detach().numpy()
+
+        if plt_title:
+            ax1.set_title("""cosine of angle between the gradient of the encoder at the \n 
+                  cdt. avg. and the derivative of the n-th decoder""")
+            ax2.set_title("""Distance between the n-th decoder and the n-th cdt. avg.""")
+        dist_dec_exp = []
+        cos_angles = []
+        for i in range(len(self.ae.decoders)):
+            grads_enc[i] = np.array(grads_enc[i])
+            grads_dec[i] = np.array(grads_dec[i])
+            cos_angles.append(np.sum(grads_enc[i] * grads_dec[i], axis=1) / np.sqrt((np.sum(grads_enc[i] ** 2, axis=1) * np.sum(grads_dec[i] ** 2, axis=1))))
+            dist_dec_exp[i].append(np.sum((np.array(Esp_X_given_z[i]) - np.array(f_dec_z[i])) ** 2, axis=1))
+
+            ax1.plot(np.arange(len(z_values[i])) / len(z_values[i]), cos_angles[i], label="""decoder """+str(i))
+            ax2.plot(np.arange(len(z_values[i])) / len(z_values[i]), dist_dec_exp[i], label='decoder 1')
+
+        ax1.plot(np.arange(len(z_values[0])) / len(z_values[0]), np.ones(len(z_values[0])), linestyle='dashed', color='black',
+                 linewidth=0.5)
+        ax1.set_ylim(y_scale_cosine[0], y_scale_cosine[1])
+        ax2.set_ylim(y_scale_dist[0], y_scale_dist[1])
+        plt.legend()
+        plt.show()
+

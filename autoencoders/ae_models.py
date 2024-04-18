@@ -211,3 +211,61 @@ class EffectiveDynamicsAutoEncoder(torch.nn.Module):
         enc = self.encoder(x)
         return ((torch.autograd.grad(outputs=enc.sum(), inputs=x)[0][:, :2]) ** 2).mean()
 
+
+class DeepAutoEncoderMultipleDec(torch.nn.Module):
+    """Class for auto-encoders with two decoders. This class does not contain a forward function."""
+    def __init__(self, encoder_dims, decoder_dims, dropout, number_decoders):
+        """Initialise auto encoder with hyperbolic tangent activation function
+
+        :param encoder_dims:    list, List of dimensions for encoder, including input/output layers
+        :param decoder_dims:    list, List of dimensions for decoder, including input/output layers
+        :param dropout:         int, value of the dropout probability
+        """
+        super(DeepAutoEncoderMultipleDec, self).__init__()
+        layers = []
+        for i in range(len(encoder_dims) - 2):
+            layers.append(torch.nn.Linear(encoder_dims[i], encoder_dims[i + 1]))
+            layers.append(torch.nn.Dropout(dropout))
+            layers.append(torch.nn.Tanh())
+        layers.append(torch.nn.Linear(encoder_dims[-2], encoder_dims[-1]))
+
+        self.encoder = torch.nn.Sequential(*layers)
+
+        self.decoders= []
+        for i in range(number_decoders):
+            layers = []
+            for i in range(len(decoder_dims) - 2):
+                layers.append(torch.nn.Linear(decoder_dims[i], decoder_dims[i + 1]))
+                layers.append(torch.nn.Dropout(dropout))
+                layers.append(torch.nn.Tanh())
+            layers.append(torch.nn.Linear(decoder_dims[-2], decoder_dims[-1]))
+            self.decoders.append(torch.nn.Sequential(*layers))
+
+    def decoded(self, inp, dec_index):
+        enc = self.encoder(inp)
+        dec = self.decoders[dec_index](enc)
+        return dec
+
+    def xi_ae(self,  x):
+        """Collective variable defined through an auto encoder model
+
+        :param x: np.array, position, ndim = 2, shape = [any, 2]
+        :return: xi: np.array, ndim = 2, shape = [any, 1]
+        """
+        self.eval()
+        if not torch.is_tensor(x):
+            x = torch.from_numpy(x).float()
+        return self.encoder(x).detach().numpy()
+
+    def grad_xi_ae(self, x):
+        """Gradient of the collective variable defined through an auto encoder model
+
+        :param x: np.array, position, ndim = 2, shape = [any, 1]
+        :return: xi: np.array, ndim = 2, shape = [any, 2]
+        """
+        self.eval()
+        if not torch.is_tensor(x):
+            x = torch.from_numpy(x).float()
+        x.requires_grad_()
+        enc = self.encoder(x)
+        return ((torch.autograd.grad(outputs=enc.sum(), inputs=x)[0][:, :2]) ** 2).mean()
