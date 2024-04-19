@@ -1275,9 +1275,13 @@ class TrainAEMultipleDecoders(TrainAE):
         :param parameters_to_train: str, either 'encoder', 'decoders',  or 'all' to set what are the trained parameters
         """
         if opt == 'Adam' and parameters_to_train == 'all':
-            self.optimizer = torch.optim.Adam([{'params': self.ae.parameters()}], lr=learning_rate)
+            self.optimizer = torch.optim.Adam(
+                [{'params': self.ae.parameters()}] + [{'params': self.ae.decoders[i].parameters()} for i in
+                                                      range(len(self.ae.decoders))], lr=learning_rate)
         elif opt == 'SGD' and parameters_to_train == 'all':
-            self.optimizer = torch.optim.SGD([{'params': self.ae.parameters()}], lr=learning_rate)
+            self.optimizer = torch.optim.SGD(
+                [{'params': self.ae.parameters()}] + [{'params': self.ae.decoders[i].parameters()} for i in
+                                                      range(len(self.ae.decoders))], lr=learning_rate)
         elif opt == 'Adam' and parameters_to_train == 'encoder':
             self.optimizer = torch.optim.Adam([{'params': self.ae.encoder.parameters()}], lr=learning_rate)
         elif opt == 'SGD' and parameters_to_train == 'encoder':
@@ -1303,8 +1307,8 @@ class TrainAEMultipleDecoders(TrainAE):
         :return mse:    torch float, mean squared error between input and output for points distributed according to
                         Boltzmann-Gibbs measure for each decoders
         """
-        return torch.mean(
-            inp[:, 2] * torch.min(torch.stack([torch.sum((inp[:, 0:2] - dec) ** 2, dim=1) for dec in decs]), dim=0))
+        min_error, _ = torch.min(torch.stack([torch.sum((inp[:, 0:2] - dec) ** 2, dim=1) for dec in decs]), dim=0)
+        return torch.mean(inp[:, 2] * min_error)
 
     @staticmethod
     def mse_loss_react(inp, decs):
@@ -1318,16 +1322,16 @@ class TrainAEMultipleDecoders(TrainAE):
         :return mse:    torch float, mean squared error between input and output for points distributed according to
                         Boltzmann-Gibbs measure.
         """
-        return torch.mean(
-            inp[:, 5] * torch.min(torch.stack([torch.sum((inp[:, 3:5] - dec) ** 2, dim=1) for dec in decs]), dim=0))
+        min_error = torch.min(torch.stack([torch.sum((inp[:, 3:5] - dec) ** 2, dim=1) for dec in decs]), dim=0)
+        return torch.mean(inp[:, 5] * min_error)
 
     def pen_points_mse(self):
         """MSE term for penalization points
 
         :return:   torch float, mean squarred error between input en output on penalization points
         """
-        return torch.mean(torch.stack([torch.sum((self.penalization_point[:, 0:2] - dec(
-                self.ae.encoder(self.penalization_point[:, :2]))) ** 2, dim=1) for dec in self.ae.decoders]), dim=0)
+        return torch.mean(torch.sum(torch.stack([torch.sum((self.penalization_point[:, 0:2] - dec(
+                self.ae.encoder(self.penalization_point[:, :2]))) ** 2, dim=1) for dec in self.ae.decoders]), dim=0))
 
     def train(self, batch_size, max_epochs):
         """ Do the training of the model self.ae
@@ -1516,9 +1520,9 @@ class TrainAEMultipleDecoders(TrainAE):
         :return Esp_X_given_z2: np.array, dim=2, shape=(n_bins, 2), the conditional averages given that decoder 2 has
                                 lowest reconstruction error
         """
-        X_given_z = [[[] for i in range(n_bins)] for dec in self.ae.decoders]
-        Esp_X_given_z = [[] for dec in self.ae.decoders]
-        f_dec_z = [[] for dec in self.ae.decoders]
+        X_given_z = [[[] for i in range(n_bins)] for j in range(len(self.ae.decoders))]
+        Esp_X_given_z = [[] for i in range(len(self.ae.decoders))]
+        f_dec_z = [[] for i in range(len(self.ae.decoders))]
         if with_react_dens:
             boltz_points = torch.tensor(self.dataset["react_points"].astype('float32'))
         else:
@@ -1535,8 +1539,9 @@ class TrainAEMultipleDecoders(TrainAE):
         # compute index of bin
         inds = np.digitize(xi_values, z_bin)
         # distribute train data to each bin
-        for bin_idx in range(n_bins):
-            for i in range(len(self.ae.decoders)):
+        non_empty_clusters = []
+        for i in range(len(self.ae.decoders)):
+            for bin_idx in range(n_bins):
                 if with_react_dens:
                     X_given_z[i][bin_idx] = self.dataset["react_points"][where[i] * (inds == bin_idx + 1), :2]
                 else:
@@ -1554,15 +1559,19 @@ class TrainAEMultipleDecoders(TrainAE):
             else:
                 Esp_X_given_z[i] = np.array(Esp_X_given_z[i])
                 f_dec_z[i] = np.array(f_dec_z[i])
+            if Esp_X_given_z[i].shape[0] > 0:
+                non_empty_clusters.append(i)
         if set_lim:
             ax.set_ylim(self.pot.y_domain[0], self.pot.y_domain[1])
             ax.set_xlim(self.pot.x_domain[0], self.pot.x_domain[1])
-        for i in range(len(self.ae.decoders)):
-            ax.plot(Esp_X_given_z[i][:, 0], Esp_X_given_z[i][:, 1], '-o', color='black', label='cond. avg. decoder '+str(i))
+        for i in non_empty_clusters:
+            ax.plot(Esp_X_given_z[i][:, 0], Esp_X_given_z[i][:, 1], '-o', label='cond. avg. decoder '+str(i))
             ax.scatter(self.dataset["boltz_points"][where[i]][:, 0],
-                       self.dataset["boltz_points"][where[i]][:, 1], color=mcolors.TABLEAU_COLORS[i], label='cluster '+str(i), s=1,
-                   alpha=0.2)
-            ax.plot(f_dec_z[i][:, 0], f_dec_z[i][:, 1], '*', color='black', label='decoder '+str(i))
+                       self.dataset["boltz_points"][where[i]][:, 1],
+                       label='cluster '+str(i),
+                       s=1,
+                       alpha=0.2)
+            ax.plot(f_dec_z[i][:, 0], f_dec_z[i][:, 1], '*', label='decoder '+str(i))
         return z_bin, Esp_X_given_z, f_dec_z
 
     def plot_principal_curve_convergence(self, ax1, ax2, n_bins, y_scale_dist=[0, 0.025], y_scale_cosine=[0.5, 1.1],
@@ -1573,12 +1582,12 @@ class TrainAEMultipleDecoders(TrainAE):
         :param ax1:             Instance of matplotlib.axes.Axes
         :param ax2:             Instance of matplotlib.axes.Axes
         """
-        grads_enc = [[] for dec in self.ae.decoders]
-        grads_dec = [[] for dec in self.ae.decoders]
-        z_values = [[] for dec in self.ae.decoders]
-        X_given_z = [[[] for i in range(n_bins)] for dec in self.ae.decoders]
-        Esp_X_given_z = [[] for dec in self.ae.decoders]
-        f_dec_z = [[] for dec in self.ae.decoders]
+        grads_enc = [[] for i in range(len(self.ae.decoders))]
+        grads_dec = [[] for i in range(len(self.ae.decoders))]
+        z_values = [[] for i in range(len(self.ae.decoders))]
+        X_given_z = [[[] for i in range(n_bins)] for j in range(len(self.ae.decoders))]
+        Esp_X_given_z = [[] for i in range(len(self.ae.decoders))]
+        f_dec_z = [[] for i in range(len(self.ae.decoders))]
 
         boltz_points = torch.tensor(self.dataset["boltz_points"].astype('float32'))
         boltz_points_decoded = torch.stack([dec(self.ae.encoder(boltz_points)) for dec in self.ae.decoders])
