@@ -290,7 +290,7 @@ class TrainAE:
         """
         if n_splits < 2:
             raise ValueError("The number of splits must be superior or equal to 2")
-        kf = KFold(n_splits=n_splits, random_state=seed)
+        kf = KFold(n_splits=n_splits, random_state=seed, shuffle=True)
         self.Kfold_splits = []
         for i, fold in kf.split(self.training_dataset):
             self.Kfold_splits.append(fold)
