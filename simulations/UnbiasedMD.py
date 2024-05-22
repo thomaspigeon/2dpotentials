@@ -172,8 +172,8 @@ class Langevin(Simulation):
                 x, p, _, _ = self.step(x, p)
                 x_traj.append(x)
                 p_traj.append(p)
-            trajectory["x_traj"] = np.array(x_traj)
-            trajectory["p_traj"] = np.array(p_traj)
+            trajectory["x_traj"] = np.array(x_traj).sum(axis=1)
+            trajectory["p_traj"] = np.array(p_traj).sum(axis=1)
             return trajectory
         if save_grad and  not save_gauss:
             grad_traj = []
@@ -182,9 +182,9 @@ class Langevin(Simulation):
                 x_traj.append(x)
                 p_traj.append(p)
                 grad_traj.append(grad)
-            trajectory["x_traj"] = np.array(x_traj)
-            trajectory["p_traj"] = np.array(p_traj)
-            trajectory["grad_traj"] = np.array(grad_traj)
+            trajectory["x_traj"] = np.array(x_traj).sum(axis=1)
+            trajectory["p_traj"] = np.array(p_traj).sum(axis=1)
+            trajectory["grad_traj"] = np.array(grad_traj).sum(axis=1)
             return trajectory
         if not save_grad and save_gauss:
             gauss_traj = []
@@ -193,9 +193,9 @@ class Langevin(Simulation):
                 x_traj.append(x)
                 p_traj.append(p)
                 gauss_traj.append(gauss)
-            trajectory["x_traj"] = np.array(x_traj)
-            trajectory["p_traj"] = np.array(p_traj)
-            trajectory["gauss_traj"] = np.array(gauss_traj)
+            trajectory["x_traj"] = np.array(x_traj).sum(axis=1)
+            trajectory["p_traj"] = np.array(p_traj).sum(axis=1)
+            trajectory["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
             return trajectory
         if save_grad and save_gauss:
             grad_traj = []
@@ -206,9 +206,9 @@ class Langevin(Simulation):
                 p_traj.append(p)
                 grad_traj.append(grad)
                 gauss_traj.append(gauss)
-            trajectory["x_traj"] = np.array(x_traj).sum(axis=1)
-            trajectory["p_traj"] = np.array(p_traj).sum(axis=1)
-            trajectory["grad_traj"] = np.array(grad_traj).sum(axis=1)
-            trajectory["gauss_traj"] = np.array(gauss_traj).sum(axis=1)
+            trajectory["x_traj"] = np.array(x_traj).sum(axis=1).sum(axis=1)
+            trajectory["p_traj"] = np.array(p_traj).sum(axis=1).sum(axis=1)
+            trajectory["grad_traj"] = np.array(grad_traj).sum(axis=1).sum(axis=1)
+            trajectory["gauss_traj"] = np.array(gauss_traj).sum(axis=1).sum(axis=1)
             return trajectory
 
