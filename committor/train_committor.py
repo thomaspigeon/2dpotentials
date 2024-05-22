@@ -1041,7 +1041,7 @@ class TainCommittorOneDecoder(TrainCommittor):
         ax.plot(f_dec_z[:, 0], f_dec_z[:, 1], '*', color='black', label='decoder best model')
 
 
-class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
+class TainCommittorMultipleDecoder(TrainCommittor):
     """Class to train committor function models with one decoder
 
     The dataset is the described in the __init__. It is first split into a training dataset and a test dataset. This
@@ -1103,9 +1103,8 @@ class TainCommittorOverdampedTwoDecoder(TrainCommittorOverdamped):
         super().__init__(committor_model,
                          pot,
                          dataset,
-                         penalization_points=penalization_points,
-                         standardize=standardize,
-                         zca_whiten=zca_whiten)
+                         penalization_points=penalization_points
+                         )
         self.optimizer = None
 
     def set_optimizer(self, opt, learning_rate, parameters_to_train='all'):
