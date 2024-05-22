@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split as ttsplit
 from sklearn.model_selection import KFold
 
 
-class TrainCommittorOverdamped:
+class TrainCommittor:
     """Class to train committor function models. It contains a decoder model to build a mean path from reactive
     trajectories or sampled Boltzmann distribution
 
@@ -354,7 +354,6 @@ class TrainCommittorOverdamped:
     @staticmethod
     def l1_penalization(model):
         """
-
         :param model:       committor_model model
         :return l1_pen:     torch float
         """
@@ -363,7 +362,6 @@ class TrainCommittorOverdamped:
     @staticmethod
     def l2_penalization(model):
         """
-
         :param model:       committor_model model
         :return l1_pen:     torch float
         """
@@ -417,10 +415,9 @@ class TrainCommittorOverdamped:
 
     def ito_loss_term(self, inp):
         """
-
-                :param inp:           batch dict with at the keys: "single_trajs_pos","single_trajs_mom",
-                                            "single_trajs_gauss" and "single_trajs_weights"
-                :return: ito_loss:    torch tensor
+        :param inp:         batch dict with at the keys: "single_trajs_pos","single_trajs_mom",
+                            "single_trajs_gauss" and "single_trajs_weights"
+        :return: ito_loss:  torch tensor
                 """
         if "single_trajs_mom" in inp.keys():
             X = torch.concat((inp["single_trajs_pos"], inp["single_trajs_mom"]), dim=2)
@@ -443,7 +440,6 @@ class TrainCommittorOverdamped:
 
     def log_ito_loss_term(self, inp):
         """
-
         :param inp:         batch dict with at the keys: "single_trajs_pos","single_trajs_mom",
                             "single_trajs_gauss" and "single_trajs_weights"
         :return: ito_loss:  torch tensor
@@ -500,7 +496,6 @@ class TrainCommittorOverdamped:
 
     def multiple_traj_loss_term_1(self, inp):
         """
-
         :param inp:                 batch dict with the keys: "multiple_trajs_pos","multiple_trajs_mom",
                                     "multiple_trajs_gauss" and "multiple_trajs_weight"
         :return: multi_traj_loss:   torch tensor
@@ -526,7 +521,6 @@ class TrainCommittorOverdamped:
 
     def multiple_traj_loss_term_2(self, inp):
         """
-
         :param inp:                 batch dict with the keys: "multiple_trajs_pos","multiple_trajs_mom",
                                     "multiple_trajs_gauss" and "multiple_trajs_weight"
         :return: multi_traj_loss:   torch tensor
@@ -552,7 +546,6 @@ class TrainCommittorOverdamped:
 
     def fixed_point_ergo_traj_1(self, inp):
         """
-
         :param inp:                 batch dict with the keys: "boltz_pos","boltz_pos_lagged",, "boltz_mom",
                                     "boltz_pos_lagged" and "boltz_weights"
         :return: multi_traj_loss:   torch tensor
@@ -580,7 +573,7 @@ class TrainCommittorOverdamped:
         return torch.mean((self.committor_model.committor(X_tau) - self.committor_model.committor(X))**2)
 
 
-class TainCommittorOneDecoder(TrainCommittorOverdamped):
+class TainCommittorOneDecoder(TrainCommittor):
     """Class to train committor function models with one decoder
 
     The dataset is the described in the __init__. It is first split into a training dataset and a test dataset. This
@@ -643,12 +636,11 @@ class TainCommittorOneDecoder(TrainCommittorOverdamped):
                          pot,
                          dataset,
                          penalization_points=penalization_points,
-                         eps = eps
+                         eps=eps
                         )
         self.optimizer = None
     def set_optimizer(self, opt, learning_rate, parameters_to_train='all'):
         """
-
         :param opt:                 str, either 'SGD' or 'Adam' to use the corresponding pytorch optimizer.
         :param learning_rate:       float, value of the learning rate, typically 10**(-3) or smaller gives good results
                                     on the tested potentials
