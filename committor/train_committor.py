@@ -70,9 +70,9 @@ class TrainCommittor:
         self.pot = pot
         self.dataset = dataset
         if torch.cuda.is_available():
-            device = 'cuda'
+            device = 'cuda:0'
         else:
-            device = 'cpe'
+            device = 'cpu'
         if penalization_points is None:
             penalization_points = np.append(np.append(pot.minR, np.zeros([1, 1]), axis=1),
                                             np.append(pot.minP, np.ones([1, 1]), axis=1),
@@ -88,7 +88,9 @@ class TrainCommittor:
         self.validation_data = None
 
         self.ito_loss_weight = None
-        self.boltz_traj_fixed_point_loss_weight = None
+        self.boltz_traj_fixed_point_loss_weight_1 = None
+        self.boltz_traj_fixed_point_loss_weight_2 = None
+        self.strahan_loss_weight = None
         self.multiple_trajs_fixed_point_loss_weight_1 = None
         self.multiple_trajs_fixed_point_loss_weight_2 = None
         self.mse_boltz_weight = None
@@ -106,8 +108,11 @@ class TrainCommittor:
 
         :param loss_params:     dict, containing:
                                 loss_params["ito_loss_weight"], float >= 0, prefactor of the ito loss term
-                                loss_params["boltz_traj_fixed_point_loss_weight"], float >= 0,
-                                loss_params["multiple_trajs_fixed_point_loss_weight"], float >= 0,
+                                loss_params["boltz_traj_fixed_point_loss_weight_1"], float >= 0,
+                                loss_params["multiple_trajs_fixed_point_loss_weight_1"], float >= 0,
+                                loss_params["boltz_traj_fixed_point_loss_weight_2"], float >= 0,
+                                loss_params["multiple_trajs_fixed_point_loss_weight_2"], float >= 0,
+                                loss_params["strahan_loss_weight"], float >= 0,
                                 loss_params["squared_grad_boltz_weight"], float >= 0, prefactor of the
                                 squared gradient the encoder on the Bolzmann-Gibbs distribution,
                                 loss_params["mse_boltz_weight"] float >= 0, prefactor of the MSE term
@@ -136,6 +141,14 @@ class TrainCommittor:
             raise ValueError("""loss_params["log_ito_loss_weight"] must be a float >= 0.""")
         else:
             self.log_ito_loss_weight = loss_params["log_ito_loss_weight"]
+
+        if "strahan_loss_weight" not in loss_params.keys():
+            self.strahan_loss_weight = 0.
+            print("""strahan_loss_weight value not provided, set to default value of: """, 0.)
+        elif type(loss_params["strahan_loss_weight"]) != float or loss_params["strahan_loss_weight"] < 0.:
+            raise ValueError("""loss_params["strahan_loss_weight"] must be a float >= 0.""")
+        else:
+            self.strahan_loss_weight = loss_params["strahan_loss_weight"]
 
         if "boltz_traj_fixed_point_loss_weight_1" not in loss_params.keys():
             self.boltz_traj_fixed_point_loss_weight_1 = 0.
@@ -572,6 +585,368 @@ class TrainCommittor:
             X_tau = inp["boltz_pos_lagged"]
         return torch.mean((self.committor_model.committor(X_tau) - self.committor_model.committor(X))**2)
 
+    def strahan_loss(self, inp):
+        """
+        :param inp:                 batch dict with the keys: "multiple_trajs_pos","multiple_trajs_mom",
+                                    "multiple_trajs_gauss" and "multiple_trajs_weight"
+        :return: multi_traj_loss:   torch tensor
+        """
+        if "two_trajs_mom" in inp.keys():
+            X = torch.concat((inp["two_trajs_pos"], inp["two_trajs_mom"]), dim=3)
+
+        else:
+            X = inp["two_trajs_pos"]
+        comm_of_x = self.committor_model.committor(X)
+
+        return torch.mean(inp["two_trajs_weights"] * (
+                    torch.mean((comm_of_x[:, :, -1, 0] - comm_of_x[:, :, 0, 0]), dim=1) ** 2))
+
+    def train(self, batch_size, max_epochs):
+        """ Do the training of the model self.committor_model
+
+        :param batch_size:      int >= 1, batch size for the mini-batching
+        :param max_epochs:      int >= 1, maximal number of epoch of training
+        :return loss_dict:      dict, contains the average loss for each epoch and its various components.
+        """
+        if self.optimizer is None:
+            print("""The optimizer has not been set, see set_optimizer method. It is set to use 'Adam' optimizer \n 
+                     with a 0.001 learning rate and optimize all the parameters of the model""")
+            self.set_optimizer('Adam', 0.001)
+        # prepare the various loss list to store
+        if torch.cuda.is_available():
+            device = 'cuda'
+        else:
+            device = 'cpu'
+        self.committor_model.to(device)
+        loss_dict = {"train_loss": [], "test_loss": []}
+        if "single_trajs_pos" in self.dataset.keys():
+            loss_dict["train_ito_loss"] = []
+            loss_dict["test_ito_loss"] = []
+            loss_dict["train_log_ito_loss"] = []
+            loss_dict["test_log_ito_loss"] = []
+        if "two_trajs_pos" in self.dataset.keys():
+            loss_dict["train_strahan_loss"] = []
+            loss_dict["test_strahan_loss"] = []
+        if "boltz_pos" in self.dataset.keys():
+            loss_dict["train_mse_boltz"] = []
+            loss_dict["test_mse_boltz"] = []
+            loss_dict["train_squared_grad_enc_blotz"] = []
+            loss_dict["test_squared_grad_enc_blotz"] = []
+        if "boltz_pos_lagged" in self.dataset.keys():
+            loss_dict["train_fixed_point_ergodic_traj_1"] = []
+            loss_dict["test_fixed_point_ergodic_traj_1"] = []
+            loss_dict["train_fixed_point_ergodic_traj_2"] = []
+            loss_dict["test_fixed_point_ergodic_traj_2"] = []
+        if "react_pos" in self.dataset.keys():
+            loss_dict["train_mse_react"] = []
+            loss_dict["test_mse_react"] = []
+        if "multiple_trajs_pos" in self.dataset.keys():
+            loss_dict["train_multi_traj_loss_1"] = []
+            loss_dict["train_multi_traj_loss_2"] = []
+            loss_dict["test_multi_traj_loss_1"] = []
+            loss_dict["test_multi_traj_loss_2"] = []
+        train_loader = torch.utils.data.DataLoader(dataset=self.train_data, batch_size=batch_size, shuffle=True)
+        test_loader = torch.utils.data.DataLoader(dataset=self.validation_data, batch_size=batch_size, shuffle=True)
+        epoch = 0
+        model = copy.deepcopy(self.committor_model)
+        while epoch < max_epochs:
+            loss_dict["train_loss"].append([])
+            if "single_trajs_pos" in self.dataset.keys():
+                loss_dict["train_ito_loss"].append([])
+                loss_dict["train_log_ito_loss"].append([])
+            if "two_trajs_pos" in self.dataset.keys():
+                loss_dict["train_strahan_loss"].append([])
+            if "boltz_pos" in self.dataset.keys():
+                loss_dict["train_mse_boltz"].append([])
+                loss_dict["train_squared_grad_enc_blotz"].append([])
+            if "boltz_pos_lagged" in self.dataset.keys():
+                loss_dict["train_fixed_point_ergodic_traj_1"].append([])
+                loss_dict["train_fixed_point_ergodic_traj_2"].append([])
+            if "react_pos" in self.dataset.keys():
+                loss_dict["train_mse_react"].append([])
+            if "multiple_trajs_pos" in self.dataset.keys():
+                loss_dict["train_multi_traj_loss_1"].append([])
+                loss_dict["train_multi_traj_loss_2"].append([])
+            # train mode
+            # self.committor_model.train()
+            for iteration, batch in enumerate(train_loader):
+                # Set gradient calculation capabilities
+                for key in batch.keys():
+                    batch[key].requires_grad_()
+                # Set the gradient of with respect to parameters to zero
+                self.optimizer.zero_grad()
+                l1_pen = self.l1_penalization(self.committor_model)
+                l2_pen = self.l2_penalization(self.committor_model)
+                loss = self.l1_pen_weight * l1_pen + \
+                       self.l2_pen_weight * l2_pen + \
+                       self.pen_points_weight * self.penalization_on_points()
+                if "single_trajs_pos" in self.dataset.keys():
+                    if self.log_ito_loss_weight > 0.:
+                        log_ito_term = self.log_ito_loss_term(batch)
+                        loss_dict["train_log_ito_loss"][epoch].append(log_ito_term.cpu().detach().numpy())
+                        loss += self.log_ito_loss_weight * log_ito_term
+                    else:
+                        loss_dict["train_log_ito_loss"][epoch].append(0.)
+                    if self.ito_loss_weight > 0.:
+                        ito_term = self.ito_loss_term(batch)
+                        loss_dict["train_ito_loss"][epoch].append(ito_term.cpu().detach().numpy())
+                        loss += self.ito_loss_weight * ito_term
+                    else:
+                        loss_dict["train_ito_loss"][epoch].append(0.)
+                if "two_trajs_pos" in self.dataset.keys():
+                    strahan_loss_term = self.strahan_loss(batch)
+                    loss_dict["train_strahan_loss"][epoch].append(strahan_loss_term.cpu().detach().numpy())
+                    loss += self.strahan_loss_weight * strahan_loss_term
+                if "boltz_pos" in self.dataset.keys():
+                    mse_blotz = self.mse_loss_boltz(batch)
+                    squared_grad_enc_boltz = self.squared_grad_encoder_penalization_boltz(batch)
+                    loss_dict["train_mse_boltz"][epoch].append(mse_blotz.cpu().detach().numpy())
+                    loss_dict["train_squared_grad_enc_blotz"][epoch].append(
+                        squared_grad_enc_boltz.cpu().detach().numpy())
+                    loss += self.mse_boltz_weight * mse_blotz + self.squared_grad_boltz_weight * squared_grad_enc_boltz
+                if "boltz_pos_lagged" in self.dataset.keys():
+                    if self.boltz_traj_fixed_point_loss_weight_1 > 0.:
+                        fixed_point_ergodic_traj_1 = self.fixed_point_ergo_traj_1(batch)
+                        loss += self.boltz_traj_fixed_point_loss_weight_1 * fixed_point_ergodic_traj_1
+                        loss_dict["train_fixed_point_ergodic_traj_1"][epoch].append(
+                            fixed_point_ergodic_traj_1.cpu().detach().numpy())
+                    if self.boltz_traj_fixed_point_loss_weight_2 > 0.:
+                        fixed_point_ergodic_traj_2 = self.fixed_point_ergo_traj_2(batch)
+                        loss += self.boltz_traj_fixed_point_loss_weight_2 * fixed_point_ergodic_traj_2
+                        loss_dict["train_fixed_point_ergodic_traj_2"][epoch].append(
+                            fixed_point_ergodic_traj_2.cpu().detach().numpy())
+                if "react_pos" in self.dataset.keys():
+                    mse_react = self.mse_loss_react(batch)
+                    loss_dict["train_mse_react"][epoch].append(mse_react.cpu().detach().numpy())
+                    loss += self.mse_react_weight * mse_react
+                if "multiple_trajs_pos" in self.dataset.keys():
+                    multi_traj_loss_1 = self.multiple_traj_loss_term_1(batch)
+                    multi_traj_loss_2 = self.multiple_traj_loss_term_1(batch)
+                    loss_dict["train_multi_traj_loss_1"][epoch].append(multi_traj_loss_1.cpu().detach().numpy())
+                    loss_dict["train_multi_traj_loss_2"][epoch].append(multi_traj_loss_2.cpu().detach().numpy())
+                    loss += self.multiple_trajs_fixed_point_loss_weight_1 * multi_traj_loss_1 + \
+                            self.multiple_trajs_fixed_point_loss_weight_2 * multi_traj_loss_2
+                loss_dict["train_loss"][epoch].append(loss.cpu().detach().numpy())
+                loss.backward()
+                self.optimizer.step()
+            loss_dict["train_loss"][epoch] = np.mean(loss_dict["train_loss"][epoch])
+            loss_dict["test_loss"].append([])
+            if "single_trajs_pos" in self.dataset.keys():
+                loss_dict["train_ito_loss"][epoch] = np.mean(loss_dict["train_ito_loss"][epoch])
+                loss_dict["test_ito_loss"].append([])
+                loss_dict["train_log_ito_loss"][epoch] = np.mean(loss_dict["train_log_ito_loss"][epoch])
+                loss_dict["test_log_ito_loss"].append([])
+            if "two_trajs_pos" in self.dataset.keys():
+                loss_dict["train_strahan_loss"][epoch] = np.mean(loss_dict["train_log_ito_loss"][epoch])
+                loss_dict["test_strahan_loss"][epoch].append([])
+            if "boltz_pos" in self.dataset.keys():
+                loss_dict["train_mse_boltz"][epoch] = np.mean(loss_dict["train_mse_boltz"][epoch])
+                loss_dict["train_squared_grad_enc_blotz"][epoch] = np.mean(
+                    loss_dict["train_squared_grad_enc_blotz"][epoch])
+                loss_dict["test_mse_boltz"].append([])
+                loss_dict["test_squared_grad_enc_blotz"].append([])
+            if "boltz_pos_lagged" in self.dataset.keys():
+                loss_dict["train_fixed_point_ergodic_traj_1"][epoch] = np.mean(
+                    loss_dict["train_fixed_point_ergodic_traj_1"][epoch])
+                loss_dict["train_fixed_point_ergodic_traj_2"][epoch] = np.mean(
+                    loss_dict["train_fixed_point_ergodic_traj_2"][epoch])
+                loss_dict["test_fixed_point_ergodic_traj_1"].append([])
+                loss_dict["test_fixed_point_ergodic_traj_2"].append([])
+            if "react_pos" in self.dataset.keys():
+                loss_dict["train_mse_react"][epoch] = np.mean(loss_dict["train_mse_react"][epoch])
+                loss_dict["test_mse_react"].append([])
+            if "multiple_trajs_pos" in self.dataset.keys():
+                loss_dict["train_multi_traj_loss_2"][epoch] = np.mean(loss_dict["train_multi_traj_loss_2"][epoch])
+                loss_dict["train_multi_traj_loss_1"][epoch] = np.mean(loss_dict["train_multi_traj_loss_1"][epoch])
+                loss_dict["test_multi_traj_loss_1"].append([])
+                loss_dict["test_multi_traj_loss_2"].append([])
+
+            # test mode
+            # self.committor_model.eval()
+            for iteration, batch in enumerate(test_loader):
+                # Set gradient calculation capabilities
+                for key in batch.keys():
+                    batch[key].requires_grad_()
+                l1_pen = self.l1_penalization(self.committor_model)
+                l2_pen = self.l2_penalization(self.committor_model)
+                loss = self.l1_pen_weight * l1_pen + \
+                       self.l2_pen_weight * l2_pen + \
+                       self.pen_points_weight * self.penalization_on_points()
+                if "single_trajs_pos" in self.dataset.keys():
+                    if self.log_ito_loss_weight > 0.:
+                        log_ito_term = self.log_ito_loss_term(batch)
+                        loss_dict["test_log_ito_loss"][epoch].append(log_ito_term.cpu().detach().numpy())
+                        loss += self.log_ito_loss_weight * log_ito_term
+                    else:
+                        loss_dict["test_log_ito_loss"][epoch].append(0.)
+                    if self.ito_loss_weight > 0.:
+                        ito_term = self.ito_loss_term(batch)
+                        loss_dict["test_ito_loss"][epoch].append(ito_term.cpu().detach().numpy())
+                        loss += self.ito_loss_weight * ito_term
+                    else:
+                        loss_dict["test_ito_loss"][epoch].append(0.)
+                if "two_trajs_pos" in self.dataset.keys():
+                    strahan_loss_term = self.strahan_loss(batch)
+                    loss_dict["test_strahan_loss"][epoch].append(strahan_loss_term.cpu().detach().numpy())
+                    loss += self.strahan_loss_weight * strahan_loss_term
+                if "boltz_pos" in self.dataset.keys():
+                    mse_blotz = self.mse_loss_boltz(batch)
+                    squared_grad_enc_boltz = self.squared_grad_encoder_penalization_boltz(batch)
+                    loss_dict["test_mse_boltz"][epoch].append(mse_blotz.cpu().detach().numpy())
+                    loss_dict["test_squared_grad_enc_blotz"][epoch].append(
+                        squared_grad_enc_boltz.cpu().detach().numpy())
+                    loss += self.mse_boltz_weight * mse_blotz + self.squared_grad_boltz_weight * squared_grad_enc_boltz
+                if "boltz_pos_lagged" in self.dataset.keys():
+                    if self.boltz_traj_fixed_point_loss_weight_1 > 0.:
+                        fixed_point_ergodic_traj_1 = self.fixed_point_ergo_traj_1(batch)
+                        loss += self.boltz_traj_fixed_point_loss_weight_1 * fixed_point_ergodic_traj_1
+                        loss_dict["test_fixed_point_ergodic_traj_1"][epoch].append(
+                            fixed_point_ergodic_traj_1.cpu().detach().numpy())
+                    if self.boltz_traj_fixed_point_loss_weight_2 > 0.:
+                        fixed_point_ergodic_traj_2 = self.fixed_point_ergo_traj_2(batch)
+                        loss += self.boltz_traj_fixed_point_loss_weight_2 * fixed_point_ergodic_traj_2
+                        loss_dict["test_fixed_point_ergodic_traj_2"][epoch].append(
+                            fixed_point_ergodic_traj_2.cpu().detach().numpy())
+                if "react_pos" in self.dataset.keys():
+                    mse_react = self.mse_loss_react(batch)
+                    loss_dict["test_mse_react"][epoch].append(mse_react.cpu().detach().numpy())
+                    loss += self.mse_react_weight * mse_react
+                if "multiple_trajs_pos" in self.dataset.keys():
+                    multi_traj_loss_1 = self.multiple_traj_loss_term_1(batch)
+                    multi_traj_loss_2 = self.multiple_traj_loss_term_1(batch)
+                    loss_dict["test_multi_traj_loss_1"][epoch].append(multi_traj_loss_1.cpu().detach().numpy())
+                    loss_dict["test_multi_traj_loss_2"][epoch].append(multi_traj_loss_2.cpu().detach().numpy())
+                    loss += self.multiple_trajs_fixed_point_loss_weight_1 * multi_traj_loss_1 + \
+                            self.multiple_trajs_fixed_point_loss_weight_2 * multi_traj_loss_2
+                loss_dict["test_loss"][epoch].append(loss.cpu().detach().numpy())
+
+            loss_dict["test_loss"][epoch] = np.mean(loss_dict["test_loss"][epoch])
+            if "single_trajs_pos" in self.dataset.keys():
+                loss_dict["test_ito_loss"][epoch] = np.mean(loss_dict["test_ito_loss"][epoch])
+                loss_dict["test_log_ito_loss"][epoch] = np.mean(loss_dict["test_log_ito_loss"][epoch])
+            if "two_trajs_pos" in self.dataset.keys():
+                loss_dict["test_strahan_loss"][epoch] = np.mean(loss_dict["test_log_ito_loss"][epoch])
+            if "boltz_pos" in self.dataset.keys():
+                loss_dict["test_mse_boltz"][epoch] = np.mean(loss_dict["test_mse_boltz"][epoch])
+                loss_dict["test_squared_grad_enc_blotz"][epoch] = np.mean(
+                    loss_dict["test_squared_grad_enc_blotz"][epoch])
+            if "boltz_pos_lagged" in self.dataset.keys():
+                loss_dict["test_fixed_point_ergodic_traj_1"][epoch] = np.mean(
+                    loss_dict["test_fixed_point_ergodic_traj_1"][epoch])
+                loss_dict["test_fixed_point_ergodic_traj_2"][epoch] = np.mean(
+                    loss_dict["test_fixed_point_ergodic_traj_2"][epoch])
+            if "react_pos" in self.dataset.keys():
+                loss_dict["test_mse_react"][epoch] = np.mean(loss_dict["test_mse_react"][epoch])
+            if "multiple_trajs_pos" in self.dataset.keys():
+                loss_dict["test_multi_traj_loss_2"][epoch] = np.mean(loss_dict["test_multi_traj_loss_2"][epoch])
+                loss_dict["test_multi_traj_loss_1"][epoch] = np.mean(loss_dict["test_multi_traj_loss_1"][epoch])
+
+            # Early stopping
+            if loss_dict["test_loss"][epoch] == np.min(loss_dict["test_loss"]):
+                model = copy.deepcopy(self.committor_model)
+            if epoch >= self.n_wait:
+                if np.min(loss_dict["test_loss"]) < np.min(loss_dict["test_loss"][- self.n_wait:]):
+                    epoch = max_epochs
+                    self.committor_model = model.to(device)
+            epoch += 1
+        print("training ends after " + str(len(loss_dict["test_loss"])) + " epochs.\n")
+        return loss_dict
+
+    def print_test_loss(self, batch_size=None):
+        """Print the test loss and its various components"""
+        if batch_size is None:
+            batch_size = len(self.test_dataset)
+        test_loader = torch.utils.data.DataLoader(dataset=self.test_dataset, batch_size=batch_size, shuffle=True)
+        if torch.cuda.is_available():
+            device = 'cuda'
+        else:
+            device = 'cpu'
+        self.committor_model.to(device)
+        loss_dict = {"test_loss": []}
+        if "single_trajs_pos" in self.dataset.keys():
+            loss_dict["test_ito_loss"] = []
+            loss_dict["test_log_ito_loss"] = []
+        if "two_trajs_pos" in self.dataset.keys():
+            loss_dict["test_strahan_loss"] = []
+        if "boltz_pos" in self.dataset.keys():
+            loss_dict["test_mse_boltz"] = []
+            loss_dict["test_squared_grad_enc_blotz"] = []
+        if "boltz_pos_lagged" in self.dataset.keys():
+            loss_dict["test_fixed_point_ergodic_traj_1"] = []
+            loss_dict["test_fixed_point_ergodic_traj_2"] = []
+        if "react_pos" in self.dataset.keys():
+            loss_dict["test_mse_react"] = []
+        if "multiple_trajs_pos" in self.dataset.keys():
+            loss_dict["test_multi_traj_loss_1"] = []
+            loss_dict["test_multi_traj_loss_2"] = []
+        for iteration, batch in enumerate(test_loader):
+            for key in batch.keys():
+                batch[key].requires_grad_()
+            l1_pen = self.l1_penalization(self.committor_model)
+            l2_pen = self.l2_penalization(self.committor_model)
+            loss = self.l1_pen_weight * l1_pen + \
+                   self.l2_pen_weight * l2_pen + \
+                   self.pen_points_weight * self.penalization_on_points()
+            if "single_trajs_pos" in self.dataset.keys():
+                log_ito_term = self.log_ito_loss_term(batch)
+                loss_dict["test_log_ito_loss"].append(log_ito_term.cpu().detach().numpy())
+                loss += self.log_ito_loss_weight * log_ito_term
+                ito_term = self.ito_loss_term(batch)
+                loss_dict["test_ito_loss"].append(ito_term.cpu().detach().numpy())
+                loss += self.ito_loss_weight * ito_term
+            if "two_trajs_pos" in self.dataset.keys():
+                strahan_loss_term = self.strahan_loss(batch)
+                loss_dict["test_strahan_loss"].append(strahan_loss_term.cpu().detach().numpy())
+                loss += self.strahan_loss_weight * strahan_loss_term
+            if "boltz_pos" in self.dataset.keys():
+                mse_blotz = self.mse_loss_boltz(batch)
+                squared_grad_enc_boltz = self.squared_grad_encoder_penalization_boltz(batch)
+                loss_dict["test_mse_boltz"].append(mse_blotz.cpu().detach().numpy())
+                loss_dict["test_squared_grad_enc_blotz"].append(
+                    squared_grad_enc_boltz.cpu().detach().numpy())
+                loss += self.mse_boltz_weight * mse_blotz + self.squared_grad_boltz_weight * squared_grad_enc_boltz
+            if "boltz_pos_lagged" in self.dataset.keys():
+                fixed_point_ergodic_traj_1 = self.fixed_point_ergo_traj_1(batch)
+                loss += self.boltz_traj_fixed_point_loss_weight_1 * fixed_point_ergodic_traj_1
+                loss_dict["test_fixed_point_ergodic_traj_1"].append(
+                    fixed_point_ergodic_traj_1.cpu().detach().numpy())
+
+                fixed_point_ergodic_traj_2 = self.fixed_point_ergo_traj_2(batch)
+                loss += self.boltz_traj_fixed_point_loss_weight_2 * fixed_point_ergodic_traj_2
+                loss_dict["test_fixed_point_ergodic_traj_2"].append(
+                    fixed_point_ergodic_traj_2.cpu().detach().numpy())
+            if "react_pos" in self.dataset.keys():
+                mse_react = self.mse_loss_react(batch)
+                loss_dict["test_mse_react"].append(mse_react.cpu().detach().numpy())
+                loss += self.mse_react_weight * mse_react
+            if "multiple_trajs_pos" in self.dataset.keys():
+                multi_traj_loss_1 = self.multiple_traj_loss_term_1(batch)
+                multi_traj_loss_2 = self.multiple_traj_loss_term_1(batch)
+                loss_dict["test_multi_traj_loss_1"].append(multi_traj_loss_1.cpu().detach().numpy())
+                loss_dict["test_multi_traj_loss_2"].append(multi_traj_loss_2.cpu().detach().numpy())
+                loss += self.multiple_trajs_fixed_point_loss_weight_1 * multi_traj_loss_1 + \
+                        self.multiple_trajs_fixed_point_loss_weight_2 * multi_traj_loss_2
+            loss_dict["test_loss"].append(loss.cpu().detach().numpy())
+
+        print("""Test loss: """, np.mean(loss_dict["test_loss"]))
+        if "single_trajs_pos" in self.dataset.keys():
+            print("""Test ito loss: """, np.mean(loss_dict["test_ito_loss"]))
+            print("""Test log ito loss: """, np.mean(loss_dict["test_log_ito_loss"]))
+        if "two_trajs_pos" in self.dataset.keys():
+            print("""Test strahan loss: """, np.mean(loss_dict["test_strahan_loss"]))
+        if "boltz_pos" in self.dataset.keys():
+            print("""Test MSE boltz loss: """, np.mean(loss_dict["test_mse_boltz"]))
+            print("""Test squared grad boltz loss: """, np.mean(loss_dict["test_squared_grad_enc_blotz"]))
+        if "boltz_pos_lagged" in self.dataset.keys():
+            print("""Test fixed point ergodic traj loss 1: """, np.mean(loss_dict["test_fixed_point_ergodic_traj_1"]))
+            print("""Test fixed point ergodic traj loss 2: """, np.mean(loss_dict["test_fixed_point_ergodic_traj_2"]))
+        if "react_pos" in self.dataset.keys():
+            print("""Test MSE react loss: """, np.mean(loss_dict["test_mse_react"]))
+        if "multiple_trajs_pos" in self.dataset.keys():
+            print("""Test multi traj loss 1: """, np.mean(loss_dict["test_multi_traj_loss_1"]))
+            print("""Test multi traj loss 2: """, np.mean(loss_dict["test_multi_traj_loss_2"]))
+        self.committor_model.to('cpu')
+
 
 class TainCommittorOneDecoder(TrainCommittor):
     """Class to train committor function models with one decoder
@@ -582,7 +957,7 @@ class TainCommittorOneDecoder(TrainCommittor):
     to generate the validation and test data.
     """
 
-    def __init__(self,  committor_model, pot, dataset, penalization_points=None, eps=1. * 10**(-8)):
+    def __init__(self,  committor_model, pot, dataset, penalization_points=None, eps=1. * 10**(-2)):
         """
 
         :param committor_model:     AE model from committor.neural_net_models.CommittorOneDecoder with 2D input.
@@ -691,354 +1066,56 @@ class TainCommittorOneDecoder(TrainCommittor):
             raise ValueError("""Cannot compute this term if there are no points distributed according to the reactive
                                 trajectory measure in the dataset""")
 
-    def train(self, batch_size, max_epochs):
-        """ Do the training of the model self.committor_model
-
-        :param batch_size:      int >= 1, batch size for the mini-batching
-        :param max_epochs:      int >= 1, maximal number of epoch of training
-        :return loss_dict:      dict, contains the average loss for each epoch and its various components.
-        """
-        if self.optimizer is None:
-            print("""The optimizer has not been set, see set_optimizer method. It is set to use 'Adam' optimizer \n 
-                     with a 0.001 learning rate and optimize all the parameters of the model""")
-            self.set_optimizer('Adam', 0.001)
-        # prepare the various loss list to store
-        if torch.cuda.is_available():
-            device = 'cuda'
-        else:
-            device = 'cpu'
-        self.committor_model.to(device)
-        loss_dict = {"train_loss": [], "test_loss": []}
-        if "single_trajs_pos" in self.dataset.keys():
-            loss_dict["train_ito_loss"] = []
-            loss_dict["test_ito_loss"] = []
-            loss_dict["train_log_ito_loss"] = []
-            loss_dict["test_log_ito_loss"] = []
-        if "boltz_pos" in self.dataset.keys():
-            loss_dict["train_mse_boltz"] = []
-            loss_dict["test_mse_boltz"] = []
-            loss_dict["train_squared_grad_enc_blotz"] = []
-            loss_dict["test_squared_grad_enc_blotz"] = []
-        if "boltz_pos_lagged" in self.dataset.keys():
-            loss_dict["train_fixed_point_ergodic_traj_1"] = []
-            loss_dict["test_fixed_point_ergodic_traj_1"] = []
-            loss_dict["train_fixed_point_ergodic_traj_2"] = []
-            loss_dict["test_fixed_point_ergodic_traj_2"] = []
-        if "react_points" in self.dataset.keys():
-            loss_dict["train_mse_react"] = []
-            loss_dict["test_mse_react"] = []
-        if "multiple_trajs_pos" in self.dataset.keys():
-            loss_dict["train_multi_traj_loss_1"] = []
-            loss_dict["train_multi_traj_loss_2"] = []
-            loss_dict["test_multi_traj_loss_1"] = []
-            loss_dict["test_multi_traj_loss_2"] = []
-        train_loader = torch.utils.data.DataLoader(dataset=self.train_data, batch_size=batch_size, shuffle=True)
-        test_loader = torch.utils.data.DataLoader(dataset=self.validation_data, batch_size=batch_size, shuffle=True)
-        epoch = 0
-        model = copy.deepcopy(self.committor_model)
-        while epoch < max_epochs:
-            loss_dict["train_loss"].append([])
-            if "single_trajs_pos" in self.dataset.keys():
-                loss_dict["train_ito_loss"].append([])
-                loss_dict["train_log_ito_loss"].append([])
-            if "boltz_pos" in self.dataset.keys():
-                loss_dict["train_mse_boltz"].append([])
-                loss_dict["train_squared_grad_enc_blotz"].append([])
-            if "boltz_pos_lagged" in self.dataset.keys():
-                loss_dict["train_fixed_point_ergodic_traj_1"].append([])
-                loss_dict["train_fixed_point_ergodic_traj_2"].append([])
-            if "react_points" in self.dataset.keys():
-                loss_dict["train_mse_react"].append([])
-            if "multiple_trajs_pos" in self.dataset.keys():
-                loss_dict["train_multi_traj_loss_1"].append([])
-                loss_dict["train_multi_traj_loss_2"].append([])
-            # train mode
-            #self.committor_model.train()
-            for iteration, batch in enumerate(train_loader):
-                # Set gradient calculation capabilities
-                for key in batch.keys():
-                    batch[key].requires_grad_()
-                # Set the gradient of with respect to parameters to zero
-                self.optimizer.zero_grad()
-                l1_pen = self.l1_penalization(self.committor_model)
-                l2_pen = self.l2_penalization(self.committor_model)
-                loss = self.l1_pen_weight * l1_pen + \
-                       self.l2_pen_weight * l2_pen + \
-                       self.pen_points_weight * self.penalization_on_points()
-                if "single_trajs_pos" in self.dataset.keys():
-                    if self.log_ito_loss_weight > 0.:
-                        log_ito_term = self.log_ito_loss_term(batch)
-                        loss_dict["train_log_ito_loss"][epoch].append(log_ito_term.cpu().detach().numpy())
-                        loss += self.log_ito_loss_weight * log_ito_term
-                    else:
-                        loss_dict["train_log_ito_loss"][epoch].append(0.)
-                    if self.ito_loss_weight > 0.:
-                        ito_term = self.ito_loss_term(batch)
-                        loss_dict["train_ito_loss"][epoch].append(ito_term.cpu().detach().numpy())
-                        loss += self.ito_loss_weight * ito_term
-                    else:
-                        loss_dict["train_ito_loss"][epoch].append(0.)
-                if "boltz_pos" in self.dataset.keys():
-                    mse_blotz = self.mse_loss_boltz(batch)
-                    squared_grad_enc_boltz = self.squared_grad_encoder_penalization_boltz(batch)
-                    loss_dict["train_mse_boltz"][epoch].append(mse_blotz.cpu().detach().numpy())
-                    loss_dict["train_squared_grad_enc_blotz"][epoch].append(squared_grad_enc_boltz.cpu().detach().numpy())
-                    loss += self.mse_boltz_weight * mse_blotz + self.squared_grad_boltz_weight * squared_grad_enc_boltz
-                if "boltz_pos_lagged" in self.dataset.keys():
-                    if self.boltz_traj_fixed_point_loss_weight_1 > 0.:
-                        fixed_point_ergodic_traj_1 = self.fixed_point_ergo_traj_1(batch)
-                        loss += self.boltz_traj_fixed_point_loss_weight_1 * fixed_point_ergodic_traj_1
-                        loss_dict["train_fixed_point_ergodic_traj_1"][epoch].append(fixed_point_ergodic_traj_1.cpu().detach().numpy())
-                    if self.boltz_traj_fixed_point_loss_weight_2 > 0.:
-                        fixed_point_ergodic_traj_2 = self.fixed_point_ergo_traj_2(batch)
-                        loss += self.boltz_traj_fixed_point_loss_weight_2 * fixed_point_ergodic_traj_2
-                        loss_dict["train_fixed_point_ergodic_traj_2"][epoch].append(fixed_point_ergodic_traj_2.cpu().detach().numpy())
-                if "react_pos" in self.dataset.keys():
-                    mse_react = self.mse_loss_react(batch)
-                    loss_dict["train_mse_react"][epoch].append(mse_react.cpu().detach().numpy())
-                    loss += self.mse_react_weight * mse_react
-                if "multiple_trajs_pos" in self.dataset.keys():
-                    multi_traj_loss_1 = self.multiple_traj_loss_term_1(batch)
-                    multi_traj_loss_2 = self.multiple_traj_loss_term_1(batch)
-                    loss_dict["train_multi_traj_loss_1"][epoch].append(multi_traj_loss_1.cpu().detach().numpy())
-                    loss_dict["train_multi_traj_loss_2"][epoch].append(multi_traj_loss_2.cpu().detach().numpy())
-                    loss += self.multiple_trajs_fixed_point_loss_weight_1 * multi_traj_loss_1 + \
-                            self.multiple_trajs_fixed_point_loss_weight_2 * multi_traj_loss_2
-                loss_dict["train_loss"][epoch].append(loss.cpu().detach().numpy())
-                loss.backward()
-                self.optimizer.step()
-            loss_dict["train_loss"][epoch] = np.mean(loss_dict["train_loss"][epoch])
-            loss_dict["test_loss"].append([])
-            if "single_trajs_pos" in self.dataset.keys():
-                loss_dict["train_ito_loss"][epoch] = np.mean(loss_dict["train_ito_loss"][epoch])
-                loss_dict["test_ito_loss"].append([])
-                loss_dict["train_log_ito_loss"][epoch] = np.mean(loss_dict["train_log_ito_loss"][epoch])
-                loss_dict["test_log_ito_loss"].append([])
-            if "boltz_pos" in self.dataset.keys():
-                loss_dict["train_mse_boltz"][epoch] = np.mean(loss_dict["train_mse_boltz"][epoch])
-                loss_dict["train_squared_grad_enc_blotz"][epoch] = np.mean(loss_dict["train_squared_grad_enc_blotz"][epoch])
-                loss_dict["test_mse_boltz"].append([])
-                loss_dict["test_squared_grad_enc_blotz"].append([])
-            if "boltz_pos_lagged" in self.dataset.keys():
-                loss_dict["train_fixed_point_ergodic_traj_1"][epoch] = np.mean(loss_dict["train_fixed_point_ergodic_traj_1"][epoch])
-                loss_dict["train_fixed_point_ergodic_traj_2"][epoch] = np.mean(
-                    loss_dict["train_fixed_point_ergodic_traj_2"][epoch])
-                loss_dict["test_fixed_point_ergodic_traj_1"].append([])
-                loss_dict["test_fixed_point_ergodic_traj_2"].append([])
-            if "react_pos" in self.dataset.keys():
-                loss_dict["train_mse_react"][epoch] = np.mean(loss_dict["train_mse_react"][epoch])
-                loss_dict["test_mse_react"].append([])
-            if "multiple_trajs_pos" in self.dataset.keys():
-                loss_dict["train_multi_traj_loss_2"][epoch] = np.mean(loss_dict["train_multi_traj_loss_2"][epoch])
-                loss_dict["train_multi_traj_loss_1"][epoch] = np.mean(loss_dict["train_multi_traj_loss_1"][epoch])
-                loss_dict["test_multi_traj_loss_1"].append([])
-                loss_dict["test_multi_traj_loss_2"].append([])
-
-            # test mode
-            #self.committor_model.eval()
-            for iteration, batch in enumerate(test_loader):
-                # Set gradient calculation capabilities
-                for key in batch.keys():
-                    batch[key].requires_grad_()
-                l1_pen = self.l1_penalization(self.committor_model)
-                l2_pen = self.l2_penalization(self.committor_model)
-                loss = self.l1_pen_weight * l1_pen + \
-                       self.l2_pen_weight * l2_pen + \
-                       self.pen_points_weight * self.penalization_on_points()
-                if "single_trajs_pos" in self.dataset.keys():
-                    if self.log_ito_loss_weight > 0.:
-                        log_ito_term = self.log_ito_loss_term(batch)
-                        loss_dict["test_log_ito_loss"][epoch].append(log_ito_term.cpu().detach().numpy())
-                        loss += self.log_ito_loss_weight * log_ito_term
-                    else:
-                        loss_dict["test_log_ito_loss"][epoch].append(0.)
-                    if self.ito_loss_weight > 0.:
-                        ito_term = self.ito_loss_term(batch)
-                        loss_dict["test_ito_loss"][epoch].append(ito_term.cpu().detach().numpy())
-                        loss += self.ito_loss_weight * ito_term
-                    else:
-                        loss_dict["test_ito_loss"][epoch].append(0.)
-                if "boltz_pos" in self.dataset.keys():
-                    mse_blotz = self.mse_loss_boltz(batch)
-                    squared_grad_enc_boltz = self.squared_grad_encoder_penalization_boltz(batch)
-                    loss_dict["test_mse_boltz"][epoch].append(mse_blotz.cpu().detach().numpy())
-                    loss_dict["test_squared_grad_enc_blotz"][epoch].append(
-                        squared_grad_enc_boltz.cpu().detach().numpy())
-                    loss += self.mse_boltz_weight * mse_blotz + self.squared_grad_boltz_weight * squared_grad_enc_boltz
-                if "boltz_pos_lagged" in self.dataset.keys():
-                    if self.boltz_traj_fixed_point_loss_weight_1 > 0.:
-                        fixed_point_ergodic_traj_1 = self.fixed_point_ergo_traj_1(batch)
-                        loss += self.boltz_traj_fixed_point_loss_weight_1 * fixed_point_ergodic_traj_1
-                        loss_dict["test_fixed_point_ergodic_traj_1"][epoch].append(
-                            fixed_point_ergodic_traj_1.cpu().detach().numpy())
-                    if self.boltz_traj_fixed_point_loss_weight_2 > 0.:
-                        fixed_point_ergodic_traj_2 = self.fixed_point_ergo_traj_2(batch)
-                        loss += self.boltz_traj_fixed_point_loss_weight_2 * fixed_point_ergodic_traj_2
-                        loss_dict["test_fixed_point_ergodic_traj_2"][epoch].append(
-                            fixed_point_ergodic_traj_2.cpu().detach().numpy())
-                if "react_pos" in self.dataset.keys():
-                    mse_react = self.mse_loss_react(batch)
-                    loss_dict["test_mse_react"][epoch].append(mse_react.cpu().detach().numpy())
-                    loss += self.mse_react_weight * mse_react
-                if "multiple_trajs_pos" in self.dataset.keys():
-                    multi_traj_loss_1 = self.multiple_traj_loss_term_1(batch)
-                    multi_traj_loss_2 = self.multiple_traj_loss_term_1(batch)
-                    loss_dict["test_multi_traj_loss_1"][epoch].append(multi_traj_loss_1.cpu().detach().numpy())
-                    loss_dict["test_multi_traj_loss_2"][epoch].append(multi_traj_loss_2.cpu().detach().numpy())
-                    loss += self.multiple_trajs_fixed_point_loss_weight_1 * multi_traj_loss_1 + \
-                            self.multiple_trajs_fixed_point_loss_weight_2 * multi_traj_loss_2
-                loss_dict["test_loss"][epoch].append(loss.cpu().detach().numpy())
-
-            loss_dict["test_loss"][epoch] = np.mean(loss_dict["test_loss"][epoch])
-            if "single_trajs_pos" in self.dataset.keys():
-                loss_dict["test_ito_loss"][epoch] = np.mean(loss_dict["test_ito_loss"][epoch])
-                loss_dict["test_log_ito_loss"][epoch] = np.mean(loss_dict["test_log_ito_loss"][epoch])
-            if "boltz_pos" in self.dataset.keys():
-                loss_dict["test_mse_boltz"][epoch] = np.mean(loss_dict["test_mse_boltz"][epoch])
-                loss_dict["test_squared_grad_enc_blotz"][epoch] = np.mean(
-                    loss_dict["test_squared_grad_enc_blotz"][epoch])
-            if "boltz_pos_lagged" in self.dataset.keys():
-                loss_dict["test_fixed_point_ergodic_traj_1"][epoch] = np.mean(
-                    loss_dict["test_fixed_point_ergodic_traj_1"][epoch])
-                loss_dict["test_fixed_point_ergodic_traj_2"][epoch] = np.mean(
-                    loss_dict["test_fixed_point_ergodic_traj_2"][epoch])
-            if "react_pos" in self.dataset.keys():
-                loss_dict["test_mse_react"][epoch] = np.mean(loss_dict["test_mse_react"][epoch])
-            if "multiple_trajs_pos" in self.dataset.keys():
-                loss_dict["test_multi_traj_loss_2"][epoch] = np.mean(loss_dict["test_multi_traj_loss_2"][epoch])
-                loss_dict["test_multi_traj_loss_1"][epoch] = np.mean(loss_dict["test_multi_traj_loss_1"][epoch])
-
-
-            # Early stopping
-            if loss_dict["test_loss"][epoch] == np.min(loss_dict["test_loss"]):
-                model = copy.deepcopy(self.committor_model)
-            if epoch >= self.n_wait:
-                if np.min(loss_dict["test_loss"]) < np.min(loss_dict["test_loss"][- self.n_wait:]):
-                    epoch = max_epochs
-                    self.committor_model = model
-            epoch += 1
-        print("training ends after " + str(len(loss_dict["test_loss"])) + " epochs.\n")
-        return loss_dict
-
-    def print_test_loss(self, batch_size=None):
-        """Print the test loss and its various components"""
-        if batch_size is None:
-            batch_size = len(self.test_dataset)
-        test_loader = torch.utils.data.DataLoader(dataset=self.test_dataset, batch_size=batch_size, shuffle=True)
-        if torch.cuda.is_available():
-            device = 'cuda'
-        else:
-            device = 'cpu'
-        self.committor_model.to(device)
-        loss_dict = {"test_loss": []}
-        if "single_trajs_pos" in self.dataset.keys():
-            loss_dict["test_ito_loss"] = []
-            loss_dict["test_log_ito_loss"] = []
-        if "boltz_pos" in self.dataset.keys():
-            loss_dict["test_mse_boltz"] = []
-            loss_dict["test_squared_grad_enc_blotz"] = []
-        if "boltz_pos_lagged" in self.dataset.keys():
-            loss_dict["test_fixed_point_ergodic_traj_1"] = []
-            loss_dict["test_fixed_point_ergodic_traj_2"] = []
-        if "react_points" in self.dataset.keys():
-            loss_dict["test_mse_react"] = []
-        if "multiple_trajs_pos" in self.dataset.keys():
-            loss_dict["test_multi_traj_loss_1"] = []
-            loss_dict["test_multi_traj_loss_2"] = []
-        for iteration, batch in enumerate(test_loader):
-            for key in batch.keys():
-                batch[key].requires_grad_()
-            l1_pen = self.l1_penalization(self.committor_model)
-            l2_pen = self.l2_penalization(self.committor_model)
-            loss = self.l1_pen_weight * l1_pen + \
-                   self.l2_pen_weight * l2_pen + \
-                   self.pen_points_weight * self.penalization_on_points()
-            if "single_trajs_pos" in self.dataset.keys():
-                log_ito_term = self.log_ito_loss_term(batch)
-                loss_dict["test_log_ito_loss"].append(log_ito_term.cpu().detach().numpy())
-                loss += self.log_ito_loss_weight * log_ito_term
-                ito_term = self.ito_loss_term(batch)
-                loss_dict["test_ito_loss"].append(ito_term.cpu().detach().numpy())
-                loss += self.ito_loss_weight * ito_term
-            if "boltz_pos" in self.dataset.keys():
-                mse_blotz = self.mse_loss_boltz(batch)
-                squared_grad_enc_boltz = self.squared_grad_encoder_penalization_boltz(batch)
-                loss_dict["test_mse_boltz"].append(mse_blotz.cpu().detach().numpy())
-                loss_dict["test_squared_grad_enc_blotz"].append(
-                    squared_grad_enc_boltz.cpu().detach().numpy())
-                loss += self.mse_boltz_weight * mse_blotz + self.squared_grad_boltz_weight * squared_grad_enc_boltz
-            if "boltz_pos_lagged" in self.dataset.keys():
-
-                fixed_point_ergodic_traj_1 = self.fixed_point_ergo_traj_1(batch)
-                loss += self.boltz_traj_fixed_point_loss_weight_1 * fixed_point_ergodic_traj_1
-                loss_dict["test_fixed_point_ergodic_traj_1"].append(
-                        fixed_point_ergodic_traj_1.cpu().detach().numpy())
-
-                fixed_point_ergodic_traj_2 = self.fixed_point_ergo_traj_2(batch)
-                loss += self.boltz_traj_fixed_point_loss_weight_2 * fixed_point_ergodic_traj_2
-                loss_dict["test_fixed_point_ergodic_traj_2"].append(
-                        fixed_point_ergodic_traj_2.cpu().detach().numpy())
-            if "react_pos" in self.dataset.keys():
-                mse_react = self.mse_loss_react(batch)
-                loss_dict["test_mse_react"].append(mse_react.cpu().detach().numpy())
-                loss += self.mse_react_weight * mse_react
-            if "multiple_trajs_pos" in self.dataset.keys():
-                multi_traj_loss_1 = self.multiple_traj_loss_term_1(batch)
-                multi_traj_loss_2 = self.multiple_traj_loss_term_1(batch)
-                loss_dict["test_multi_traj_loss_1"].append(multi_traj_loss_1.cpu().detach().numpy())
-                loss_dict["test_multi_traj_loss_2"].append(multi_traj_loss_2.cpu().detach().numpy())
-                loss += self.multiple_trajs_fixed_point_loss_weight_1 * multi_traj_loss_1 + \
-                        self.multiple_trajs_fixed_point_loss_weight_2 * multi_traj_loss_2
-            loss_dict["test_loss"].append(loss.cpu().detach().numpy())
-
-        print("""Test loss: """, np.mean(loss_dict["test_loss"]))
-        if "single_trajs_pos" in self.dataset.keys():
-            print("""Test ito loss: """, np.mean(loss_dict["test_ito_loss"]))
-        if "boltz_pos" in self.dataset.keys():
-            print("""Test MSE boltz loss: """, np.mean(loss_dict["test_mse_boltz"]))
-            print("""Test squared grad boltz loss: """, np.mean(loss_dict["test_squared_grad_enc_blotz"]))
-        if "boltz_pos_lagged" in self.dataset.keys():
-            print("""Test fixed point ergodic traj loss 1: """, np.mean(loss_dict["test_fixed_point_ergodic_traj_1"]))
-            print("""Test fixed point ergodic traj loss 2: """, np.mean(loss_dict["test_fixed_point_ergodic_traj_2"]))
-        if "react_pos" in self.dataset.keys():
-            print("""Test MSE react loss: """, np.mean(loss_dict["test_mse_react"]))
-        if "multiple_trajs_pos" in self.dataset.keys():
-            print("""Test multi traj loss 1: """, np.mean(loss_dict["test_multi_traj_loss_1"]))
-            print("""Test multi traj loss 2: """, np.mean(loss_dict["test_multi_traj_loss_2"]))
-        self.committor_model.to('cpu')
-
-    def plot_conditional_averages(self, ax, n_bins, set_lim=False):
-        """Plot conditional averages computed on the full dataset of boltzmann distributed points to the given ax
+    def plot_conditional_averages(self, ax, n_bins, set_lim=False, with_react_dens=False, z_minmax=None):
+        """Plot conditional averages computed on the full dataset to the given ax
 
         :param ax:              Instance of matplotlib.axes.Axes
         :param n_bins:          int, number of bins to compute conditional averages
         :param set_lim:         boolean, whether the limits of the x and y axes should be set.
-        :return bin_population: list of ints, len==n_bins, population of each bin
+        :param with_react_dens: boolean, whether the ocnditional averages are computed with the reactive density or the
+                                boltzmann gibbs distribution
+        :param z_minmax         list, of two floats corresponding to the min and the max for the bins.
+
+        :return z_bin           np.array, dim=1, shape= nbins, uniformly spaced bins (left boundary)
+        :return Esp_X_given_z1: np.array, dim=2, shape=(n_bins, 2), the conditional averages given that decoder 1 has
+                                lowest reconstruction error
+        :return Esp_X_given_z2: np.array, dim=2, shape=(n_bins, 2), the conditional averages given that decoder 2 has
+                                lowest reconstruction error
         """
         X_given_z = [[] for i in range(n_bins)]
         Esp_X_given_z = []
         f_dec_z = []
-        xi_values = self.committor_model.xi_forward(self.dataset["boltz_pos"])[:, 0]
+        if torch.cuda.is_available():
+            device = 'cuda:0'
+        else:
+            device = 'cpu'
+        if with_react_dens:
+            points = torch.tensor(self.dataset["react_pos"].astype('float32'), device=device)
+        else:
+            points = torch.tensor(self.dataset["boltz_pos"].astype('float32'), device=device)
+        xi_values = self.committor_model.xi_forward(points)[:, 0]
         # equal-width bins
-        z_bin = np.linspace(xi_values.min(), xi_values.max(), n_bins)
+        if z_minmax == None:
+            z_bin = np.linspace(xi_values.min(), xi_values.max(), n_bins)
+        else:
+            z_bin = np.linspace(z_minmax[0], z_minmax[1], n_bins)
         # compute index of bin
         inds = np.digitize(xi_values, z_bin)
         # distribute train data to each bin
-        bin_population = np.zeros(n_bins)
         for bin_idx in range(n_bins):
-            X_given_z[bin_idx] = self.dataset["boltz_points"][inds == bin_idx + 1, :2]
-            bin_population[bin_idx] = len(X_given_z[bin_idx])
-            if len(X_given_z[bin_idx]) != 0:
+            X_given_z[bin_idx] = points[(inds == bin_idx + 1), :2]
+            if len(X_given_z[bin_idx]) > 0:
                 Esp_X_given_z.append(torch.tensor(X_given_z[bin_idx].astype('float32')).mean(dim=0))
-                f_dec_z.append(self.committor_model(Esp_X_given_z[-1]).detach().numpy())
+                f_dec_z.append(self.committor_model.decoder(self.committor_model.encoder(Esp_X_given_z[-1])).detach().numpy())
                 Esp_X_given_z[-1] = Esp_X_given_z[-1].detach().numpy()
         Esp_X_given_z = np.array(Esp_X_given_z)
         f_dec_z = np.array(f_dec_z)
         if set_lim:
             ax.set_ylim(self.pot.y_domain[0], self.pot.y_domain[1])
             ax.set_xlim(self.pot.x_domain[0], self.pot.x_domain[1])
-        ax.plot(Esp_X_given_z[:, 0], Esp_X_given_z[:, 1], '-o', color='blue', label='cond. avg. best model')
-        ax.plot(f_dec_z[:, 0], f_dec_z[:, 1], '*', color='black', label='decoder best model')
+        ax.plot(Esp_X_given_z[:, 0], Esp_X_given_z[:, 1], '-o', label='cond. avg. decoder')
+        ax.plot(f_dec_z[:, 0], f_dec_z[:, 1], '*', label='decoder')
+        return z_bin, Esp_X_given_z, f_dec_z
 
 
 class TainCommittorMultipleDecoder(TrainCommittor):
@@ -1050,7 +1127,7 @@ class TainCommittorMultipleDecoder(TrainCommittor):
     to generate the validation and test data.
     """
 
-    def __init__(self,  committor_model, pot, dataset, penalization_points=None):
+    def __init__(self,  committor_model, pot, dataset, penalization_points=None, eps=1. * 10**(-2)):
         """
 
         :param committor_model:     AE model from committor.neural_net_models.CommittorTwoDecoder with 2D input.
@@ -1103,6 +1180,7 @@ class TainCommittorMultipleDecoder(TrainCommittor):
         super().__init__(committor_model,
                          pot,
                          dataset,
+                         eps=eps,
                          penalization_points=penalization_points
                          )
         self.optimizer = None
@@ -1116,464 +1194,112 @@ class TainCommittorMultipleDecoder(TrainCommittor):
         :param parameters_to_train: str, either 'encoder', 'decoders',  or 'all' to set what are the trained parameters
         """
         if opt == 'Adam' and parameters_to_train == 'all':
-            self.optimizer = torch.optim.Adam([{'params': self.committor_model.parameters()}], lr=learning_rate)
+            self.optimizer = torch.optim.Adam(
+                [{'params': self.committor_model.parameters()}] + [{'params': self.committor_model.decoders[i].parameters()} for i in
+                                                      range(len(self.committor_model.decoders))], lr=learning_rate)
         elif opt == 'SGD' and parameters_to_train == 'all':
-            self.optimizer = torch.optim.SGD([{'params': self.committor_model.parameters()}], lr=learning_rate)
+            self.optimizer = torch.optim.SGD(
+                [{'params': self.committor_model.parameters()}] + [{'params': self.committor_model.decoders[i].parameters()} for i in
+                                                      range(len(self.committor_model.decoders))], lr=learning_rate)
         elif opt == 'Adam' and parameters_to_train == 'encoder':
             self.optimizer = torch.optim.Adam([{'params': self.committor_model.encoder.parameters()}], lr=learning_rate)
         elif opt == 'SGD' and parameters_to_train == 'encoder':
             self.optimizer = torch.optim.SGD([{'params': self.committor_model.encoder.parameters()}], lr=learning_rate)
         elif opt == 'Adam' and parameters_to_train == 'decoders':
             self.optimizer = torch.optim.Adam(
-                [{'params': self.committor_model.decoder1.parameters()},
-                 {'params': self.committor_model.decoder2.parameters()}],
-                lr=learning_rate)
+                [{'params': self.committor_model.decoders[i].parameters()} for i in range(len(self.committor_model.decoders))], lr=learning_rate)
         elif opt == 'SGD' and parameters_to_train == 'decoders':
             self.optimizer = torch.optim.SGD(
-                [{'params': self.committor_model.decoder1.parameters()},
-                 {'params': self.committor_model.decoder2.parameters()}],
-                lr=learning_rate)
+                [{'params': self.committor_model.decoders[i].parameters()} for i in range(len(self.committor_model.decoders))], lr=learning_rate)
         else:
             raise ValueError("""The parameters opt and parameters_to_train must be specific str, see docstring""")
 
-    def mse_loss_boltz(self, inp, dec1, dec2):
+    def mse_loss_boltz(self, inp):
         """MSE term on points distributed according to Boltzmann-Gibbs measure.
 
-        :param inp:     torch.tensor, ndim==2, a chunk of self.training_data or self.test_data
-        :param dec1:    torch.tensor, ndim==2, shape==[any, 2], output of the first decoder corresponding to part of the
-                        inp distributed according to Boltzmann-Gibbs measure
-        :param dec2:    torch.tensor, ndim==2, shape==[any, 2], output of the second decoder corresponding to part of
-                        the inp distributed according to Boltzmann-Gibbs measure
+        :param inp:     batch dict with the keys: "boltz_pos" and "boltz_weights"
         :return mse:    torch float, mean squared error between input and output for points distributed according to
                         Boltzmann-Gibbs measure.
         """
-        if "react_points" in self.dataset.keys() and "boltz_points" in self.dataset.keys():
-            return torch.mean(inp[:, 2] *
-                              torch.minimum(torch.sum((inp[:, 0:2] - dec1) ** 2, dim=1),
-                                            torch.sum((inp[:, 0:2] - dec2) ** 2, dim=1)))
-        elif "react_points" not in self.dataset.keys() and "boltz_points" in self.dataset.keys():
-            return torch.mean(inp[:, 2] *
-                              torch.minimum(torch.sum((inp[:, 0:2] - dec1) ** 2, dim=1),
-                                            torch.sum((inp[:, 0:2] - dec2) ** 2, dim=1)))
-        else:
-            raise ValueError("""Cannot compute this term if there are no points distributed according to the Bolzmann-
-                                Gibbs measure in the dataset""")
+        decs = self.committor_model.decoded(inp["boltz_pos"])
+        min_error, _ = torch.min(torch.stack([torch.sum((inp["boltz_pos"] - dec) ** 2, dim=1) for dec in decs]), dim=0)
+        return torch.mean(inp["react_weights"] * min_error)
 
-    def mse_loss_react(self, inp, dec1, dec2):
+    def mse_loss_react(self, inp):
         """MSE term on points distributed according to reactive trajectories measure.
 
-        :param inp:     torch.tensor, ndim==2, a chunk of self.training_data or self.test_data
-        :param out:     torch.tensor, ndim==2, shape==[any, 2], output of the autoencoder corresponding to part of the
-                        inp distributed according to reactive trajectories measure
+        :param inp:     batch dict with the keys: "react_pos" and "react_weights"
         :return mse:    torch float, mean squared error between input and output for points distributed according to
                         Boltzmann-Gibbs measure.
         """
-        if "react_points" in self.dataset.keys() and "boltz_points" in self.dataset.keys():
-            return torch.mean(inp[:, 5] *
-                              torch.minimum(torch.sum((inp[:, 3:5] - dec1) ** 2, dim=1),
-                                            torch.sum((inp[:, 3:5] - dec2) ** 2, dim=1)))
-        elif "react_points" in self.dataset.keys() and "boltz_points" not in self.dataset.keys():
-            return torch.mean(inp[:, 2] *
-                              torch.minimum(torch.sum((inp[:, 0:2] - dec1) ** 2, dim=1),
-                                            torch.sum((inp[:, 0:2] - dec2) ** 2, dim=1)))
-        else:
-            raise ValueError("""Cannot compute this term if there are no points distributed according to the reactive
-                                trajectory measure in the dataset""")
+        decs = self.committor_model.decoded(inp["react_pos"])
+        min_error, _ = torch.min(torch.stack([torch.sum((inp["react_pos"] - dec) ** 2, dim=1) for dec in decs]), dim=0)
+        return torch.mean(inp["react_weights"] * min_error)
 
-    def train(self, batch_size, max_epochs):
-        """ Do the training of the model self.committor_model
-
-        :param batch_size:      int >= 1, batch size for the mini-batching
-        :param max_epochs:      int >= 1, maximal number of epoch of training
-        :return loss_dict:      dict, contains the average loss for each epoch and its various components.
-        """
-        if self.optimizer is None:
-            print("""The optimizer has not been set, see set_optimizer method. It is set to use 'Adam' optimizer \n 
-                     with a 0.001 learning rate and optimize all the parameters of the model""")
-            self.set_optimizer('Adam', 0.001)
-        # prepare the various loss list to store
-        loss_dict = {"train_loss": [], "test_loss": [], "train_ito_loss": [], "test_ito_loss": []}
-        if "boltz_points" in self.dataset.keys():
-            loss_dict["train_mse_boltz"] = []
-            loss_dict["test_mse_boltz"] = []
-            loss_dict["train_squared_grad_enc_blotz"] = []
-            loss_dict["test_squared_grad_enc_blotz"] = []
-        if "react_points" in self.dataset.keys():
-            loss_dict["train_mse_react"] = []
-            loss_dict["test_mse_react"] = []
-        train_loader = torch.utils.data.DataLoader(dataset=self.train_data, batch_size=batch_size, shuffle=True)
-        test_loader = torch.utils.data.DataLoader(dataset=self.validation_data, batch_size=batch_size, shuffle=True)
-        epoch = 0
-        model = copy.deepcopy(self.committor_model)
-        while epoch < max_epochs:
-            loss_dict["train_loss"].append([])
-            loss_dict["train_ito_loss"].append([])
-            if "boltz_points" in self.dataset.keys():
-                loss_dict["train_mse_boltz"].append([])
-                loss_dict["train_squared_grad_enc_blotz"].append([])
-            if "react_points" in self.dataset.keys():
-                loss_dict["train_mse_react"].append([])
-            # train mode
-            self.committor_model.train()
-            for iteration, X in enumerate(train_loader):
-                # Set gradient calculation capabilities
-                X.requires_grad_()
-                # Set the gradient of with respect to parameters to zero
-                self.optimizer.zero_grad()
-                l1_pen = self.l1_penalization(self.committor_model)
-                l2_pen = self.l2_penalization(self.committor_model)
-                loss = self.l1_pen_weight * l1_pen + \
-                       self.l2_pen_weight * l2_pen + \
-                       self.pen_points_weight * self.penalization_on_points()
-
-                if "boltz_points" in self.dataset.keys() and "react_points" in self.dataset.keys():
-                    enc = self.committor_model.encoder(X[:, 0:2])
-                    dec1 = self.committor_model.decoder1(enc)
-                    dec2 = self.committor_model.decoder2(enc)
-                    mse_blotz = self.mse_loss_boltz(X, dec1, dec2)
-                    squared_grad_enc_boltz = self.squared_grad_encoder_penalization_boltz(X, enc)
-                    enc_reac = self.committor_model.encoder(X[:, 3:5])
-                    dec_reac1 = self.committor_model.decoder1(enc_reac)
-                    dec_reac2 = self.committor_model.decoder2(enc_reac)
-                    mse_react = self.mse_loss_react(X, dec_reac1, dec_reac2)
-                    ito_term = self.ito_loss_term(X[:, 6:])
-                    loss += self.ito_loss_weight * ito_term + \
-                            self.mse_boltz_weight * mse_blotz + \
-                            self.squared_grad_boltz_weight * squared_grad_enc_boltz + \
-                            self.mse_react_weight * mse_react
-                    loss_dict["train_mse_boltz"][epoch].append(mse_blotz.detach().numpy())
-                    loss_dict["train_squared_grad_enc_blotz"][epoch].append(squared_grad_enc_boltz.detach().numpy())
-                    loss_dict["train_mse_react"][epoch].append(mse_react.detach().numpy())
-
-                elif "boltz_points" in self.dataset.keys() and "react_points" not in self.dataset.keys():
-                    enc = self.committor_model.encoder(X[:, 0:2])
-                    dec1 = self.committor_model.decoder1(enc)
-                    dec2 = self.committor_model.decoder2(enc)
-                    mse_blotz = self.mse_loss_boltz(X, dec1, dec2)
-                    squared_grad_enc_boltz = self.squared_grad_encoder_penalization_boltz(X, enc)
-                    ito_term = self.ito_loss_term(X[:, 3:])
-                    loss += self.ito_loss_weight * ito_term + \
-                            self.mse_boltz_weight * mse_blotz + \
-                            self.squared_grad_boltz_weight * squared_grad_enc_boltz
-                    loss_dict["train_mse_boltz"][epoch].append(mse_blotz.detach().numpy())
-                    loss_dict["train_squared_grad_enc_blotz"][epoch].append(squared_grad_enc_boltz.detach().numpy())
-
-                elif "boltz_points" not in self.dataset.keys() and "react_points" in self.dataset.keys():
-                    enc_reac = self.committor_model.encoder(X[:, 0:2])
-                    dec_reac1 = self.committor_model.decoder1(enc_reac)
-                    dec_reac2 = self.committor_model.decoder2(enc_reac)
-                    mse_react = self.mse_loss_react(X, dec_reac1, dec_reac2)
-                    ito_term = self.ito_loss_term(X[:, 3:])
-                    loss += self.ito_loss_weight * ito_term + \
-                            self.mse_react_weight * mse_react
-                    loss_dict["train_mse_react"][epoch].append(mse_react.detach().numpy())
-                else:
-                    ito_term = self.ito_loss_term(X)
-                    loss += self.ito_loss_weight * ito_term
-                loss_dict["train_ito_loss"][epoch].append(ito_term.detach().numpy())
-                loss_dict["train_loss"][epoch].append(loss.detach().numpy())
-                loss.backward()
-                self.optimizer.step()
-            loss_dict["train_loss"][epoch] = np.mean(loss_dict["train_loss"][epoch])
-            loss_dict["train_ito_loss"][epoch] = np.mean(loss_dict["train_ito_loss"][epoch])
-
-            loss_dict["test_loss"].append([])
-            loss_dict["test_ito_loss"].append([])
-            if "boltz_points" in self.dataset.keys():
-                loss_dict["train_mse_boltz"][epoch] = np.mean(loss_dict["train_mse_boltz"][epoch])
-                loss_dict["train_squared_grad_enc_blotz"][epoch] = np.mean(
-                    loss_dict["train_squared_grad_enc_blotz"][epoch])
-                loss_dict["test_mse_boltz"].append([])
-                loss_dict["test_squared_grad_enc_blotz"].append([])
-            if "react_points" in self.dataset.keys():
-                loss_dict["train_mse_react"][epoch] = np.mean(loss_dict["train_mse_react"][epoch])
-                loss_dict["test_mse_react"].append([])
-            # test mode
-            self.committor_model.eval()
-            for iteration, X in enumerate(test_loader):
-                # Set gradient calculation capabilities
-                # Set gradient calculation capabilities
-                X.requires_grad_()
-                l1_pen = self.l1_penalization(self.committor_model)
-                l2_pen = self.l2_penalization(self.committor_model)
-                loss = self.l1_pen_weight * l1_pen + \
-                       self.l2_pen_weight * l2_pen + \
-                       self.pen_points_weight * self.penalization_on_points()
-                if "boltz_points" in self.dataset.keys() and "react_points" in self.dataset.keys():
-                    enc = self.committor_model.encoder(X[:, 0:2])
-                    dec1 = self.committor_model.decoder1(enc)
-                    dec2 = self.committor_model.decoder2(enc)
-                    mse_blotz = self.mse_loss_boltz(X, dec1, dec2)
-                    squared_grad_enc_boltz = self.squared_grad_encoder_penalization_boltz(X, enc)
-                    enc_reac = self.committor_model.encoder(X[:, 3:5])
-                    dec_reac1 = self.committor_model.decoder1(enc_reac)
-                    dec_reac2 = self.committor_model.decoder2(enc_reac)
-                    mse_react = self.mse_loss_react(X, dec_reac1, dec_reac2)
-                    ito_term = self.ito_loss_term(X[:, 6:])
-                    loss += self.ito_loss_weight * ito_term + \
-                            self.mse_boltz_weight * mse_blotz + \
-                            self.squared_grad_boltz_weight * squared_grad_enc_boltz + \
-                            self.mse_react_weight * mse_react
-                    loss_dict["test_mse_boltz"][epoch].append(mse_blotz.detach().numpy())
-                    loss_dict["test_squared_grad_enc_blotz"][epoch].append(squared_grad_enc_boltz.detach().numpy())
-                    loss_dict["test_mse_react"][epoch].append(mse_react.detach().numpy())
-                elif "boltz_points" in self.dataset.keys() and "react_points" not in self.dataset.keys():
-                    enc = self.committor_model.encoder(X[:, 0:2])
-                    dec1 = self.committor_model.decoder1(enc)
-                    dec2 = self.committor_model.decoder2(enc)
-                    mse_blotz = self.mse_loss_boltz(X, dec1, dec2)
-                    squared_grad_enc_boltz = self.squared_grad_encoder_penalization_boltz(X, enc)
-                    ito_term = self.ito_loss_term(X[:, 3:])
-                    loss += self.ito_loss_weight * ito_term + \
-                            self.mse_boltz_weight * mse_blotz + \
-                            self.squared_grad_boltz_weight * squared_grad_enc_boltz
-                    loss_dict["test_mse_boltz"][epoch].append(mse_blotz.detach().numpy())
-                    loss_dict["test_squared_grad_enc_blotz"][epoch].append(squared_grad_enc_boltz.detach().numpy())
-                elif "boltz_points" not in self.dataset.keys() and "react_points" in self.dataset.keys():
-                    enc_reac = self.committor_model.encoder(X[:, 0:2])
-                    dec_reac1 = self.committor_model.decoder1(enc_reac)
-                    dec_reac2 = self.committor_model.decoder2(enc_reac)
-                    mse_react = self.mse_loss_react(X, dec_reac1, dec_reac2)
-                    ito_term = self.ito_loss_term(X[:, 3:])
-                    loss += self.ito_loss_weight * ito_term + \
-                            self.mse_react_weight * mse_react
-                    loss_dict["test_mse_react"][epoch].append(mse_react.detach().numpy())
-                else:
-                    ito_term = self.ito_loss_term(X)
-                    loss += self.ito_loss_weight * ito_term
-                loss_dict["test_ito_loss"][epoch].append(ito_term.detach().numpy())
-                loss_dict["test_loss"][epoch].append(loss.detach().numpy())
-                loss.backward()
-                self.optimizer.step()
-            loss_dict["test_loss"][epoch] = np.mean(loss_dict["test_loss"][epoch])
-            loss_dict["test_ito_loss"][epoch] = np.mean(loss_dict["test_ito_loss"][epoch])
-            if "boltz_points" in self.dataset.keys():
-                loss_dict["test_mse_boltz"][epoch] = np.mean(loss_dict["test_mse_boltz"][epoch])
-                loss_dict["test_squared_grad_enc_blotz"][epoch] = np.mean(
-                    loss_dict["test_squared_grad_enc_blotz"][epoch])
-            if "react_points" in self.dataset.keys():
-                loss_dict["test_mse_react"][epoch] = np.mean(loss_dict["test_mse_react"][epoch])
-
-            # Early stopping
-            if loss_dict["test_loss"][epoch] == np.min(loss_dict["test_loss"]):
-                model = copy.deepcopy(self.committor_model)
-            if epoch >= self.n_wait:
-                if np.min(loss_dict["test_loss"]) < np.min(loss_dict["test_loss"][- self.n_wait:]):
-                    epoch = max_epochs
-                    self.committor_model = model
-            epoch += 1
-        print("training ends after " + str(len(loss_dict["test_loss"])) + " epochs.\n")
-        return loss_dict
-
-    def print_test_loss(self):
-        """Print the test loss and its various components"""
-        X = self.test_dataset
-        X.requires_grad_()
-        l1_pen = self.l1_penalization(self.committor_model)
-        l2_pen = self.l2_penalization(self.committor_model)
-        loss = self.l1_pen_weight * l1_pen + \
-               self.l2_pen_weight * l2_pen + \
-               self.pen_points_weight * self.penalization_on_points()
-
-        if "boltz_points" in self.dataset.keys() and "react_points" in self.dataset.keys():
-            enc = self.committor_model.encoder(X[:, 0:2])
-            dec1 = self.committor_model.decoder1(enc)
-            dec2 = self.committor_model.decoder2(enc)
-            mse_blotz = self.mse_loss_boltz(X, dec1, dec2)
-            squared_grad_enc_boltz = self.squared_grad_encoder_penalization_boltz(X, enc)
-            enc_reac = self.committor_model.encoder(X[:, 3:5])
-            dec_reac1 = self.committor_model.decoder1(enc_reac)
-            dec_reac2 = self.committor_model.decoder2(enc_reac)
-            mse_react = self.mse_loss_react(X, dec_reac1, dec_reac2)
-            ito_term = self.ito_loss_term(X[:, 6:])
-            loss += self.ito_loss_weight * ito_term + \
-                    self.mse_boltz_weight * mse_blotz + \
-                    self.squared_grad_boltz_weight * squared_grad_enc_boltz + \
-                    self.mse_react_weight * mse_react
-            print("""Test MSE Boltzmann: """, mse_blotz)
-            print("""Test squarred grad encoder boltzmann: """, squared_grad_enc_boltz)
-            print("""Test MSE reactive: """, mse_react)
-        elif "boltz_points" in self.dataset.keys() and "react_points" not in self.dataset.keys():
-            enc = self.committor_model.encoder(X[:, 0:2])
-            dec1 = self.committor_model.decoder1(enc)
-            dec2 = self.committor_model.decoder2(enc)
-            mse_blotz = self.mse_loss_boltz(X, dec1, dec2)
-            squared_grad_enc_boltz = self.squared_grad_encoder_penalization_boltz(X, enc)
-            ito_term = self.ito_loss_term(X[:, 3:])
-            loss += self.ito_loss_weight * ito_term + \
-                    self.mse_boltz_weight * mse_blotz + \
-                    self.squared_grad_boltz_weight * squared_grad_enc_boltz
-            print("""Test MSE Boltzmann: """, mse_blotz)
-            print("""Test squarred grad encoder boltzmann: """, squared_grad_enc_boltz)
-        elif "boltz_points" not in self.dataset.keys() and "react_points" in self.dataset.keys():
-            enc_reac = self.committor_model.encoder(X[:, 0:2])
-            dec_reac1 = self.committor_model.decoder1(enc_reac)
-            dec_reac2 = self.committor_model.decoder2(enc_reac)
-            mse_react = self.mse_loss_react(X, dec_reac1, dec_reac2)
-            ito_term = self.ito_loss_term(X[:, 3:])
-            loss += self.ito_loss_weight * ito_term + \
-                    self.mse_react_weight * mse_react
-            print("""Test MSE reative: """, mse_react)
-        else:
-            ito_term = self.ito_loss_term(X)
-            loss += self.ito_loss_weight * ito_term
-        print("""Test Ito term loss: """, ito_term)
-        print("""Test loss: """, loss)
-
-    def plot_conditional_averages(self, ax, n_bins, set_lim=False):
+    def plot_conditional_averages(self, ax, n_bins, set_lim=False, with_react_dens=False, z_minmax=None):
         """Plot conditional averages computed on the full dataset to the given ax
 
         :param ax:              Instance of matplotlib.axes.Axes
         :param n_bins:          int, number of bins to compute conditional averages
         :param set_lim:         boolean, whether the limits of the x and y axes should be set.
-        :return bin_population: list of ints, len==n_bins, population of each bin
+        :param with_react_dens: boolean, whether the ocnditional averages are computed with the reactive density or the
+                                boltzmann gibbs distribution
+        :param z_minmax         list, of two floats corresponding to the min and the max for the bins.
+
+        :return z_bin           np.array, dim=1, shape= nbins, uniformly spaced bins (left boundary)
+        :return Esp_X_given_z1: np.array, dim=2, shape=(n_bins, 2), the conditional averages given that decoder 1 has
+                                lowest reconstruction error
+        :return Esp_X_given_z2: np.array, dim=2, shape=(n_bins, 2), the conditional averages given that decoder 2 has
+                                lowest reconstruction error
         """
-        X_given_z1 = [[] for i in range(n_bins)]
-        X_given_z2 = [[] for i in range(n_bins)]
-        Esp_X_given_z1 = []
-        Esp_X_given_z2 = []
-        f_dec_z1 = []
-        f_dec_z2 = []
-        react_points = torch.tensor(self.dataset["react_points"].astype('float32'))
-        react_points_decoded1 = self.committor_model.decoder1(self.committor_model.encoder(react_points))
-        react_points_decoded2 = self.committor_model.decoder2(self.committor_model.encoder(react_points))
-        xi_values = self.committor_model.xi_forward(self.dataset["react_points"])[:, :2]
+        X_given_z = [[[] for i in range(n_bins)] for j in range(len(self.committor_model.decoders))]
+        Esp_X_given_z = [[] for i in range(len(self.committor_model.decoders))]
+        f_dec_z = [[] for i in range(len(self.committor_model.decoders))]
+        if torch.cuda.is_available():
+            device = 'cuda:0'
+        else:
+            device = 'cpu'
+        if with_react_dens:
+            points = torch.tensor(self.dataset["react_pos"].astype('float32'), device=device)
+        else:
+            points = torch.tensor(self.dataset["boltz_pos"].astype('float32'), device=device)
+        points_decoded = torch.stack([dec(self.committor_model.encoder(points)) for dec in self.committor_model.decoders])
+        error = torch.sum((points_decoded - points) ** 2, dim=2).cpu().detach().numpy()
+        where = error <= np.min(error, axis=0)
+        xi_values = self.committor_model.xi_forward(points)[:, 0]
         # equal-width bins
-        z_bin = np.linspace(xi_values.min(), xi_values.max(), n_bins)
+        if z_minmax == None:
+            z_bin = np.linspace(xi_values.min(), xi_values.max(), n_bins)
+        else:
+            z_bin = np.linspace(z_minmax[0], z_minmax[1], n_bins)
         # compute index of bin
         inds = np.digitize(xi_values, z_bin)
         # distribute train data to each bin
-        x1 = torch.sum((react_points - react_points_decoded1) ** 2, dim=1).detach().numpy() < torch.sum(
-            (react_points - react_points_decoded2) ** 2,
-            dim=1).detach().numpy()
-        x2 = torch.sum((react_points - react_points_decoded2) ** 2, dim=1).detach().numpy() < torch.sum(
-            (react_points - react_points_decoded1) ** 2,
-            dim=1).detach().numpy()
-        for bin_idx in range(n_bins):
-            X_given_z1[bin_idx] = react_points[x1 * (inds == bin_idx + 1)[:, 0], :2]
-            X_given_z2[bin_idx] = react_points[x2 * (inds == bin_idx + 1)[:, 0], :2]
-            if len(X_given_z1[bin_idx]) > 0:
-                Esp_X_given_z1.append(X_given_z1[bin_idx].mean(dim=0))
-                f_dec_z1.append(self.committor_model.decoder1(self.committor_model.encoder(Esp_X_given_z1[-1])).detach().numpy())
-                Esp_X_given_z1[-1] = Esp_X_given_z1[-1].detach().numpy()
-            if len(X_given_z2[bin_idx]) > 0:
-                Esp_X_given_z2.append(X_given_z2[bin_idx].mean(dim=0))
-                f_dec_z2.append(self.committor_model.decoder2(self.committor_model.encoder(Esp_X_given_z2[-1])).detach().numpy())
-                Esp_X_given_z2[-1] = Esp_X_given_z2[-1].detach().numpy()
-        if self.standardize:
-            Esp_X_given_z1 = self.scaler.inverse_transform(np.array(Esp_X_given_z1))
-            f_dec_z1 = self.scaler.inverse_transform(np.array(f_dec_z1))
-            Esp_X_given_z2 = self.scaler.inverse_transform(np.array(Esp_X_given_z2))
-            f_dec_z2 = self.scaler.inverse_transform(np.array(f_dec_z2))
-        elif self.zca_whiten:
-            Esp_X_given_z1 = np.linalg.inv(self.ZCAMatrix).dot(np.array(Esp_X_given_z1).T).T
-            f_dec_z1 = np.linalg.inv(self.ZCAMatrix).dot(np.array(f_dec_z1).T).T
-            Esp_X_given_z2 = np.linalg.inv(self.ZCAMatrix).dot(np.array(Esp_X_given_z2).T).T
-            f_dec_z2 = np.linalg.inv(self.ZCAMatrix).dot(np.array(f_dec_z2).T).T
-        else:
-            Esp_X_given_z1 = np.array(Esp_X_given_z1)
-            f_dec_z1 = np.array(f_dec_z1)
-            Esp_X_given_z2 = np.array(Esp_X_given_z2)
-            f_dec_z2 = np.array(f_dec_z2)
+        non_empty_clusters = []
+        for i in range(len(self.committor_model.decoders)):
+            for bin_idx in range(n_bins):
+                if with_react_dens:
+                    X_given_z[i][bin_idx] = self.dataset["react_pos"][where[i] * (inds == bin_idx + 1), :2]
+                else:
+                    X_given_z[i][bin_idx] = self.dataset["boltz_pos"][where[i] * (inds == bin_idx + 1), :2]
+                if len(X_given_z[i][bin_idx]) > 0:
+                    Esp_X_given_z[i].append(torch.tensor(X_given_z[i][bin_idx].astype('float32'), device=device).mean(dim=0))
+                    f_dec_z[i].append(self.committor_model.decoders[i](self.committor_model.encoder(Esp_X_given_z[i][-1])).cpu().detach().numpy())
+                    Esp_X_given_z[i][-1] = Esp_X_given_z[i][-1].detach().numpy()
+            Esp_X_given_z[i] = np.array(Esp_X_given_z[i])
+            f_dec_z[i] = np.array(f_dec_z[i])
+            if Esp_X_given_z[i].shape[0] > 0:
+                non_empty_clusters.append(i)
         if set_lim:
             ax.set_ylim(self.pot.y_domain[0], self.pot.y_domain[1])
             ax.set_xlim(self.pot.x_domain[0], self.pot.x_domain[1])
-        ax.plot(Esp_X_given_z1[:, 0], Esp_X_given_z1[:, 1], '-o', color='midnightblue', label='cond. avg. decoder 1')
-        ax.plot(Esp_X_given_z2[:, 0], Esp_X_given_z2[:, 1], '-o', color='brown', label='cond. avg. decoder 2')
-        ax.scatter(self.dataset["react_points"][x1][:, 0],
-                    self.dataset["react_points"][x1][:, 1], color='blue', label='decoder1', s=1,
-                    alpha=0.2)
-        ax.scatter(self.dataset["react_points"][x2][:, 0],
-                    self.dataset["react_points"][x2][:, 1], color='purple', label='decoder2', s=1,
-                    alpha=0.2)
-        ax.plot(f_dec_z1[:, 0], f_dec_z1[:, 1], '*', color='black', label='decoder 1')
-        ax.plot(f_dec_z2[:, 0], f_dec_z2[:, 1], '*', color='pink', label='decoder 2')
-
-    def plot_principal_curve_convergence(self, n_bins):
-        """Plot conditional averages computed on the full dataset to the given ax
-
-        :param n_bins:          int, number of bins to compute conditional averages
-        """
-        grads_enc1 = []
-        grads_dec1 = []
-        grads_enc2 = []
-        grads_dec2 = []
-        z_values1 = []
-        z_values2 = []
-        X_given_z1 = [[] for i in range(n_bins)]
-        X_given_z2 = [[] for i in range(n_bins)]
-        Esp_X_given_z1 = []
-        Esp_X_given_z2 = []
-        f_dec_z1 = []
-        f_dec_z2 = []
-        boltz_points = torch.tensor(self.dataset["boltz_points"].astype('float32'))
-        boltz_points_decoded1 = self.committor_model.decoder1(self.committor_model.encoder(boltz_points))
-        boltz_points_decoded2 = self.committor_model.decoder2(self.committor_model.encoder(boltz_points))
-        xi_values = self.committor_model.xi_forward(self.dataset["boltz_points"])[:, 0]
-        # equal-width bins
-        z_bin = np.linspace(xi_values.min(), xi_values.max(), n_bins)
-        # compute index of bin
-        inds = np.digitize(xi_values, z_bin)
-        # distribute train data to each bin
-        x1 = torch.sum((boltz_points - boltz_points_decoded1) ** 2, dim=1).detach().numpy() < torch.sum(
-            (boltz_points - boltz_points_decoded1) ** 2,
-            dim=1).detach().numpy()
-        x2 = torch.sum((boltz_points - boltz_points_decoded2) ** 2, dim=1).detach().numpy() < torch.sum(
-            (boltz_points - boltz_points_decoded2) ** 2,
-            dim=1).detach().numpy()
-        for bin_idx in range(n_bins):
-            X_given_z1[bin_idx] = boltz_points[x1 * (inds == bin_idx + 1), :2]
-            X_given_z2[bin_idx] = boltz_points[x2 * (inds == bin_idx + 1), :2]
-            if len(X_given_z1[bin_idx]) > 0:
-                Esp_X_given_z1.append(torch.tensor(X_given_z1[bin_idx].astype('float32')).mean(dim=0))
-                f_dec_z1.append(self.committor_model.decoder1(self.committor_model.encoder(Esp_X_given_z1[-1])).detach().numpy())
-                Esp_X_given_z1[-1].requires_grad_()
-                z1 = self.committor_model.encoder(Esp_X_given_z1[-1])
-                z_values1.append(z1.detach().numpy())
-                grad_f_enc1 = torch.autograd.grad(z1, Esp_X_given_z1[-1])[0]
-                grads_enc1.append(grad_f_enc1.detach().numpy())
-                z1.requires_grad_()
-                grad_f_dec1 = torch.autograd.functional.jacobian(self.committor_model.decoder1, z1, create_graph=False).sum(dim=1)
-                grads_dec1.append(grad_f_dec1.detach().numpy())
-                Esp_X_given_z1[-1] = Esp_X_given_z1[-1].detach().numpy()
-            if len(X_given_z2[bin_idx]) > 0:
-                Esp_X_given_z2.append(torch.tensor(X_given_z2[bin_idx].astype('float32')).mean(dim=0))
-                f_dec_z2.append(self.committor_model.decoder2(self.committor_model.encoder(Esp_X_given_z2[-1])).detach().numpy())
-                Esp_X_given_z2[-1].requires_grad_()
-                z2 = self.committor_model.encoder(Esp_X_given_z2[-1])
-                z_values2.append(z2.detach().numpy())
-                grad_f_enc2 = torch.autograd.grad(z2, Esp_X_given_z2[-1])[0]
-                grads_enc2.append(grad_f_enc2.detach().numpy())
-                z2.requires_grad_()
-                grad_f_dec2 = torch.autograd.functional.jacobian(self.committor_model.decoder2, z2, create_graph=False).sum(dim=1)
-                grads_dec2.append(grad_f_dec2.detach().numpy())
-                Esp_X_given_z2[-1] = Esp_X_given_z2[-1].detach().numpy()
-        grads_enc1 = np.array(grads_enc1)
-        grads_dec1 = np.array(grads_dec1)
-        grads_enc2 = np.array(grads_enc2)
-        grads_dec2 = np.array(grads_dec2)
-        cos_angles1 = np.sum(grads_enc1 * grads_dec1, axis=1) / np.sqrt(
-            (np.sum(grads_enc1 ** 2, axis=1) * np.sum(grads_dec1 ** 2, axis=1)))
-        dist_dec_exp1 = np.sum(
-            (np.array(Esp_X_given_z1) - np.array(f_dec_z1)) ** 2, axis=1)
-        cos_angles2 = np.sum(grads_enc2 * grads_dec2, axis=1) / np.sqrt(
-            (np.sum(grads_enc2 ** 2, axis=1) * np.sum(grads_dec2 ** 2, axis=1)))
-        dist_dec_exp2 = np.sum(
-            (np.array(Esp_X_given_z2) - np.array(f_dec_z2)) ** 2, axis=1)
-        plt.figure()
-        plt.plot(z_values1, cos_angles1,
-                 label="""cosine of angle between the gradient of the encoder at the \n 
-                 cdt. avg. 1 and the derivative of the decoder1""")
-        plt.plot(z_values2, cos_angles2,
-                 label="""cosine of angle between the gradient of the encoder at the \n 
-                 cdt. avg. 2 and the derivative of the decoder2""")
-        plt.legend()
-        plt.show()
-        plt.figure()
-        plt.plot(z_values1, dist_dec_exp1,
-                 label='distance between the decoder 1 and the conditional average 1')
-        plt.plot(z_values2, dist_dec_exp2,
-                 label='distance between the decoder 2 and the conditional average 2')
-        plt.legend()
-        plt.show()
+        for i in non_empty_clusters:
+            ax.plot(Esp_X_given_z[i][:, 0], Esp_X_given_z[i][:, 1], '-o', label='cond. avg. decoder ' + str(i))
+            ax.scatter(points[where[i]][:, 0],
+                       points[where[i]][:, 1],
+                       label='cluster ' + str(i),
+                       s=1,
+                       alpha=0.2)
+            ax.plot(f_dec_z[i][:, 0], f_dec_z[i][:, 1], '*', label='decoder ' + str(i))
+        return z_bin, Esp_X_given_z, f_dec_z
 
