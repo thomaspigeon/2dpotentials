@@ -936,7 +936,7 @@ class AMSLangevin(Langevin):
                 p_traj = []
                 k = 0
                 reps[i]["z_max"] = self.xi(reps[j]["x_traj"][k:k+1], reps[j]["p_traj"][k:k+1])
-                while self.xi(reps[j]["x_traj"][k:k+1], reps[j]["p_traj"][k:k+1]) < z_kill:
+                while self.xi(reps[j]["x_traj"][k:k+1], reps[j]["p_traj"][k:k+1]) <= z_kill:
                     x_traj.append(reps[j]["x_traj"][k:k+1])
                     p_traj.append(reps[j]["p_traj"][k:k+1])
                     if self.xi(reps[j]["x_traj"][k:k+1], reps[j]["p_traj"][k:k+1]) >= reps[i]["z_max"]:
@@ -970,7 +970,7 @@ class AMSLangevin(Langevin):
                 grad_traj = []
                 k = 0
                 reps[i]["z_max"] = self.xi(reps[j]["x_traj"][k:k + 1], reps[j]["p_traj"][k:k + 1])
-                while self.xi(reps[j]["x_traj"][k:k + 1], reps[j]["p_traj"][k:k + 1]) < z_kill:
+                while self.xi(reps[j]["x_traj"][k:k + 1], reps[j]["p_traj"][k:k + 1]) <= z_kill:
                     x_traj.append(reps[j]["x_traj"][k:k + 1])
                     p_traj.append(reps[j]["p_traj"][k:k + 1])
                     grad_traj.append(reps[j]["grad_traj"][k:k + 1])
@@ -1008,7 +1008,7 @@ class AMSLangevin(Langevin):
                 gauss_traj = []
                 k = 0
                 reps[i]["z_max"] = self.xi(reps[j]["x_traj"][k:k + 1], reps[j]["p_traj"][k:k + 1])
-                while self.xi(reps[j]["x_traj"][k:k + 1], reps[j]["p_traj"][k:k + 1]) < z_kill:
+                while self.xi(reps[j]["x_traj"][k:k + 1], reps[j]["p_traj"][k:k + 1]) <= z_kill:
                     x_traj.append(reps[j]["x_traj"][k:k + 1])
                     p_traj.append(reps[j]["p_traj"][k:k + 1])
                     gauss_traj.append(reps[j]["gauss_traj"][k:k + 1])
@@ -1047,7 +1047,7 @@ class AMSLangevin(Langevin):
                 gauss_traj = []
                 k = 0
                 reps[i]["z_max"] = self.xi(reps[j]["x_traj"][k:k + 1], reps[j]["p_traj"][k:k + 1])
-                while self.xi(reps[j]["x_traj"][k:k + 1], reps[j]["p_traj"][k:k + 1]) < z_kill:
+                while self.xi(reps[j]["x_traj"][k:k + 1], reps[j]["p_traj"][k:k + 1]) <= z_kill:
                     x_traj.append(reps[j]["x_traj"][k:k + 1])
                     p_traj.append(reps[j]["p_traj"][k:k + 1])
                     grad_traj.append(reps[j]["grad_traj"][k:k + 1])
