@@ -338,6 +338,8 @@ class TrainCommittor:
         :param n_splits: int, number of splits
         :param seed:     int, random state
         """
+        if n_splits < 2:
+            raise ValueError("The number of splits must be superior or equal to 2")
         kf = KFold(n_splits=n_splits, shuffle=True, random_state=seed)
         self.Kfold_splits = []
         for i, fold in kf.split(self.training_dataset):
@@ -569,7 +571,15 @@ class TrainCommittor:
         else:
             X = inp["boltz_pos"]
             X_tau = inp["boltz_pos_lagged"]
-        return torch.mean(self.committor_model.committor(X) * (self.committor_model.committor(X) - self.committor_model.committor(X_tau)))
+
+        return torch.mean(
+            (1 - self.committor_model.inR(X)) * (1 - self.committor_model.inP(X)) * inp["boltz_weights"] * self.committor_model.committor(X) * \
+            (
+                self.committor_model.committor(X) - \
+                (1 - self.committor_model.inR(X_tau)) * (1 - self.committor_model.inP(X_tau)) * self.committor_model.committor(X_tau) - \
+                2 * (self.committor_model.inR(X_tau) + self.committor_model.inP(X_tau)) * self.committor_model.committor(X_tau)
+            )
+        )
 
     def fixed_point_ergo_traj_2(self, inp):
         """
@@ -583,13 +593,15 @@ class TrainCommittor:
         else:
             X = inp["boltz_pos"]
             X_tau = inp["boltz_pos_lagged"]
-        return torch.mean((self.committor_model.committor(X_tau) - self.committor_model.committor(X))**2)
+        return torch.mean(
+            inp["boltz_weights"] * (1 - self.committor_model.inR(X)) * (1 - self.committor_model.inP(X)) * \
+            (self.committor_model.committor(X_tau) - self.committor_model.committor(X))**2
+        )
 
     def strahan_loss(self, inp):
         """
-        :param inp:                 batch dict with the keys: "multiple_trajs_pos","multiple_trajs_mom",
-                                    "multiple_trajs_gauss" and "multiple_trajs_weight"
-        :return: multi_traj_loss:   torch tensor
+        :param inp:                 batch dict with the keys: "two_trajs_pos", and optionally "two_trajs_mom",
+        :return: strahan_loss:   torch tensor
         """
         if "two_trajs_mom" in inp.keys():
             X = torch.concat((inp["two_trajs_pos"], inp["two_trajs_mom"]), dim=3)
@@ -598,8 +610,8 @@ class TrainCommittor:
             X = inp["two_trajs_pos"]
         comm_of_x = self.committor_model.committor(X)
 
-        return torch.mean(inp["two_trajs_weights"] * (
-                    torch.mean((comm_of_x[:, :, -1, 0] - comm_of_x[:, :, 0, 0]), dim=1) ** 2))
+        return torch.mean(inp["two_trajs_weights"] *
+                    (comm_of_x[:, 0, -1, 0] - comm_of_x[:, 0, 0, 0]) * (comm_of_x[:, 1, -1, 0] - comm_of_x[:, 1, 0, 0]))
 
     def train(self, batch_size, max_epochs):
         """ Do the training of the model self.committor_model
@@ -737,8 +749,8 @@ class TrainCommittor:
                 loss_dict["train_log_ito_loss"][epoch] = np.mean(loss_dict["train_log_ito_loss"][epoch])
                 loss_dict["test_log_ito_loss"].append([])
             if "two_trajs_pos" in self.dataset.keys():
-                loss_dict["train_strahan_loss"][epoch] = np.mean(loss_dict["train_log_ito_loss"][epoch])
-                loss_dict["test_strahan_loss"][epoch].append([])
+                loss_dict["train_strahan_loss"][epoch] = np.mean(loss_dict["train_strahan_loss"][epoch])
+                loss_dict["test_strahan_loss"].append([])
             if "boltz_pos" in self.dataset.keys():
                 loss_dict["train_mse_boltz"][epoch] = np.mean(loss_dict["train_mse_boltz"][epoch])
                 loss_dict["train_squared_grad_enc_blotz"][epoch] = np.mean(
@@ -825,7 +837,7 @@ class TrainCommittor:
                 loss_dict["test_ito_loss"][epoch] = np.mean(loss_dict["test_ito_loss"][epoch])
                 loss_dict["test_log_ito_loss"][epoch] = np.mean(loss_dict["test_log_ito_loss"][epoch])
             if "two_trajs_pos" in self.dataset.keys():
-                loss_dict["test_strahan_loss"][epoch] = np.mean(loss_dict["test_log_ito_loss"][epoch])
+                loss_dict["test_strahan_loss"][epoch] = np.mean(loss_dict["test_strahan_loss"][epoch])
             if "boltz_pos" in self.dataset.keys():
                 loss_dict["test_mse_boltz"][epoch] = np.mean(loss_dict["test_mse_boltz"][epoch])
                 loss_dict["test_squared_grad_enc_blotz"][epoch] = np.mean(
@@ -929,23 +941,34 @@ class TrainCommittor:
             loss_dict["test_loss"].append(loss.cpu().detach().numpy())
 
         print("""Test loss: """, np.mean(loss_dict["test_loss"]))
+        test_loss_dict = {"test_loss": np.mean(loss_dict["test_loss"])}
         if "single_trajs_pos" in self.dataset.keys():
             print("""Test ito loss: """, np.mean(loss_dict["test_ito_loss"]))
+            test_loss_dict["test_ito_loss"] = np.mean(loss_dict["test_ito_loss"])
             print("""Test log ito loss: """, np.mean(loss_dict["test_log_ito_loss"]))
+            test_loss_dict["test_log_ito_loss"] = np.mean(loss_dict["test_log_ito_loss"])
         if "two_trajs_pos" in self.dataset.keys():
             print("""Test strahan loss: """, np.mean(loss_dict["test_strahan_loss"]))
+            test_loss_dict["test_strahan_loss"] = np.mean(loss_dict["test_strahan_loss"])
         if "boltz_pos" in self.dataset.keys():
             print("""Test MSE boltz loss: """, np.mean(loss_dict["test_mse_boltz"]))
+            test_loss_dict["test_mse_boltz"] = np.mean(loss_dict["test_mse_boltz"])
             print("""Test squared grad boltz loss: """, np.mean(loss_dict["test_squared_grad_enc_blotz"]))
+            test_loss_dict["test_squared_grad_enc_blotz"] = np.mean(loss_dict["test_squared_grad_enc_blotz"])
         if "boltz_pos_lagged" in self.dataset.keys():
             print("""Test fixed point ergodic traj loss 1: """, np.mean(loss_dict["test_fixed_point_ergodic_traj_1"]))
+            test_loss_dict["test_fixed_point_ergodic_traj_1"] = np.mean(loss_dict["test_fixed_point_ergodic_traj_1"])
             print("""Test fixed point ergodic traj loss 2: """, np.mean(loss_dict["test_fixed_point_ergodic_traj_2"]))
+            test_loss_dict["test_fixed_point_ergodic_traj_2"] = np.mean(loss_dict["test_fixed_point_ergodic_traj_2"])
         if "react_pos" in self.dataset.keys():
             print("""Test MSE react loss: """, np.mean(loss_dict["test_mse_react"]))
+            test_loss_dict["test_mse_react"] = np.mean(loss_dict["test_mse_react"])
         if "multiple_trajs_pos" in self.dataset.keys():
             print("""Test multi traj loss 1: """, np.mean(loss_dict["test_multi_traj_loss_1"]))
+            test_loss_dict["test_multi_traj_loss_1"] = np.mean(loss_dict["test_multi_traj_loss_1"])
             print("""Test multi traj loss 2: """, np.mean(loss_dict["test_multi_traj_loss_2"]))
-        self.committor_model.to('cpu')
+            test_loss_dict["test_multi_traj_loss_2"] = np.mean(loss_dict["test_multi_traj_loss_2"])
+        return test_loss_dict
 
 
 class TainCommittorOneDecoder(TrainCommittor):
@@ -1223,7 +1246,7 @@ class TainCommittorMultipleDecoder(TrainCommittor):
         """
         decs = self.committor_model.decoded(inp["boltz_pos"])
         min_error, _ = torch.min(torch.stack([torch.sum((inp["boltz_pos"] - dec) ** 2, dim=1) for dec in decs]), dim=0)
-        return torch.mean(inp["react_weights"] * min_error)
+        return torch.mean(inp["boltz_weights"] * min_error)
 
     def mse_loss_react(self, inp):
         """MSE term on points distributed according to reactive trajectories measure.
